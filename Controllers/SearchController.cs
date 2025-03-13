@@ -2,7 +2,7 @@ using Microsoft.AspNetCore.Mvc;
 using System.Collections.Generic;
 
 [ApiController]
-[Route("/")]
+[Route("api")]
 public class SearchController : ControllerBase
 {
     private readonly RpfService _rpfService;

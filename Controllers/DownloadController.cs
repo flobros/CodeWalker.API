@@ -27,6 +27,7 @@ public class DownloadController : ControllerBase
         }
 
         var results = new List<object>();
+
         foreach (var filename in filenames)
         {
             try
@@ -57,14 +58,26 @@ public class DownloadController : ControllerBase
                         string xmlFilePath = Path.Combine(outputFolderPath, newFilename);
                         System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
                         results.Add(new { filename, message = "XML and related files saved successfully.", xmlFilePath });
-                        continue;
                     }
-
-                    return File(Encoding.UTF8.GetBytes(xmlData), "application/xml", newFilename);
+                    else
+                    {
+                        results.Add(new { filename, message = "XML conversion successful.", xmlData });
+                    }
+                    continue;
                 }
 
-                // If not XML, return raw file normally
-                return File(fileBytes, "application/octet-stream", filename);
+                // If not XML, add result to the list instead of returning immediately
+                if (!string.IsNullOrEmpty(outputFolderPath))
+                {
+                    Directory.CreateDirectory(outputFolderPath);
+                    string outputFilePath = Path.Combine(outputFolderPath, filename);
+                    System.IO.File.WriteAllBytes(outputFilePath, fileBytes);
+                    results.Add(new { filename, message = "File saved successfully.", outputFilePath });
+                }
+                else
+                {
+                    results.Add(new { filename, message = "File extracted successfully.", fileSize = fileBytes.Length });
+                }
             }
             catch (FileNotFoundException)
             {

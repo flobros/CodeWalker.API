@@ -32,7 +32,7 @@ filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_YDR_FI
 ### ✅ Search for Files in RPF Archives
 # This request searches for files in the RPF archive that match the given query.
 
-GET {{CodeWalkerAPI_HostAddress}}/api/search-file?filename=prop_alien_egg
+GET {{CodeWalkerAPI_HostAddress}}/api/search-file?filename=prop_alien_egg_01
 Accept: application/json
 
 
