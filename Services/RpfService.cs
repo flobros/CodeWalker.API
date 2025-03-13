@@ -85,17 +85,17 @@ public class RpfService
 
     public RpfDirectoryEntry FindDirectoryInRpf(RpfFile rpfFile, string folderPath)
     {
-        // Navigate through the RPF structure
-        RpfDirectoryEntry currentDir = rpfFile.Root;
+        RpfDirectoryEntry? currentDir = rpfFile.Root;
         foreach (var part in folderPath.Split(Path.DirectorySeparatorChar))
         {
-            currentDir = currentDir.Directories.Find(d => d.Name.Equals(part, StringComparison.OrdinalIgnoreCase));
+            currentDir = currentDir?.Directories.Find(d => d.Name.Equals(part, StringComparison.OrdinalIgnoreCase));
+
             if (currentDir == null)
             {
                 throw new Exception($"Directory not found inside RPF: {folderPath}");
             }
         }
-        return currentDir;
+        return currentDir!; 
     }
 
 

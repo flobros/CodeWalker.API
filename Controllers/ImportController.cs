@@ -6,11 +6,25 @@ using CodeWalker.GameFiles;
 using System;
 using System.Collections.Generic;
 
+
+
 [Route("api")]
 [ApiController]
 public class ImportController : ControllerBase
+
 {
     private readonly RpfService _rpfService;
+
+    private static readonly HashSet<MetaFormat> ValidMetaFormats = new()
+    {
+        MetaFormat.RSC, MetaFormat.XML, MetaFormat.PSO, MetaFormat.RBF,
+        MetaFormat.AudioRel, MetaFormat.Ynd, MetaFormat.Ynv, MetaFormat.Ycd,
+        MetaFormat.Ybn, MetaFormat.Ytd, MetaFormat.Ydr, MetaFormat.Ydd,
+        MetaFormat.Yft, MetaFormat.Ypt, MetaFormat.Yld, MetaFormat.Yed,
+        MetaFormat.Ywr, MetaFormat.Yvr, MetaFormat.Awc, MetaFormat.Fxc,
+        MetaFormat.CacheFile, MetaFormat.Heightmap, MetaFormat.Ypdb,
+        MetaFormat.Yfd, MetaFormat.Mrf
+    };
 
     public ImportController(RpfService rpfService)
     {
@@ -64,7 +78,7 @@ public class ImportController : ControllerBase
                 string fullFilename = Path.GetFileNameWithoutExtension(filePath);
                 var fileFormat = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
 
-                if (fileFormat == null)
+                if (!ValidMetaFormats.Contains(fileFormat))
                 {
                     Console.WriteLine("[ERROR] Unsupported XML format.");
                     results.Add(new { filePath, error = "Unsupported XML format." });
