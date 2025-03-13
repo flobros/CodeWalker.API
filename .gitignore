@@ -1,0 +1,28 @@
+# Build artifacts
+bin/
+obj/
+
+# User-specific files
+.vs/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider-specific files
+.idea/
+*.sln.iml
+
+# Auto-generated packages
+*.nupkg
+packages/
+NuGet.Config
+NuGet.exe
+project.lock.json
+project.assets.json
+
+# Visual Studio Code
+.vscode/
+
+# Logs
+*.log
