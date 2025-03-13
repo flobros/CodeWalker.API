@@ -1,6 +1,38 @@
-@CodeWalker.API_HostAddress = http://localhost:5024
+﻿@CodeWalkerAPI_HostAddress = http://localhost:5024
 
-GET {{CodeWalker.API_HostAddress}}/weatherforecast/
+### ✅ With XML Conversion (Downloads files and converts to XML)
+# This request downloads the specified YDR files and converts them to XML before saving.
+
+GET {{CodeWalkerAPI_HostAddress}}/api/download-files?filenames=prop_alien_egg_01.ydr&filenames=apa_mp_apa_yacht.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out
 Accept: application/json
 
-###
+### ✅ Without XML Conversion (Downloads files as they are)
+# This request downloads the specified YDR files without converting them to XML.
+
+GET {{CodeWalkerAPI_HostAddress}}/api/download-files?filenames=prop_alien_egg_01.ydr&filenames=apa_mp_apa_yacht.ydr&xml=false&outputFolderPath=C:\GTA_YDR_FILES\out
+Accept: application/json
+
+### ✅ With outputFolder (Writes to Disk + Imports to RPF)
+# This request imports the XML files into the RPF archive AND saves them to the specified output folder.
+
+POST {{CodeWalkerAPI_HostAddress}}/api/import-xml
+Content-Type: application/x-www-form-urlencoded
+
+filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_YDR_FILES\out\apa_mp_apa_yacht.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf&outputFolder=C:\GTA_YDR_FILES\out
+
+
+### ✅ Without outputFolder (Only Imports to RPF, No File Saving)
+# This request imports the XML files into the RPF archive but does NOT save them to disk.
+
+POST {{CodeWalkerAPI_HostAddress}}/api/import-xml
+Content-Type: application/x-www-form-urlencoded
+
+filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_YDR_FILES\out\apa_mp_apa_yacht.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf
+
+### ✅ Search for Files in RPF Archives
+# This request searches for files in the RPF archive that match the given query.
+
+GET {{CodeWalkerAPI_HostAddress}}/api/search-file?filename=prop_alien_egg
+Accept: application/json
+
+

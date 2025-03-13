@@ -19,14 +19,14 @@ public class ImportController : ControllerBase
 
     [HttpPost("import-xml")]
     public async Task<IActionResult> ImportXml(
-        [FromForm] List<string> filePaths,
-        [FromForm] string rpfArchivePath,
-        [FromForm] string outputFolder)
+    [FromForm] List<string> filePaths,
+    [FromForm] string rpfArchivePath,
+    [FromForm] string? outputFolder = null) // Make outputFolder optional
     {
         Console.WriteLine($"[DEBUG] Received Import Request");
         Console.WriteLine($"[DEBUG] Processing {filePaths.Count} files");
         Console.WriteLine($"[DEBUG] RPF Archive Path: {rpfArchivePath}");
-        Console.WriteLine($"[DEBUG] Output Folder: {outputFolder}");
+        Console.WriteLine($"[DEBUG] Output Folder: {outputFolder ?? "Not Provided (Skipping file write)"}");
 
         if (filePaths == null || filePaths.Count == 0)
         {
@@ -38,12 +38,6 @@ public class ImportController : ControllerBase
         {
             Console.WriteLine("[ERROR] Invalid or missing RPF archive path.");
             return BadRequest("Invalid or missing RPF archive path.");
-        }
-
-        if (string.IsNullOrWhiteSpace(outputFolder) || !Directory.Exists(outputFolder))
-        {
-            Console.WriteLine("[ERROR] Invalid or missing output folder.");
-            return BadRequest("Invalid or missing output folder.");
         }
 
         var results = new List<object>();
@@ -63,26 +57,21 @@ public class ImportController : ControllerBase
             {
                 Console.WriteLine("[DEBUG] Reading XML data...");
                 string xmlText = await System.IO.File.ReadAllTextAsync(filePath);
-
                 var doc = new System.Xml.XmlDocument();
                 doc.LoadXml(xmlText);
                 Console.WriteLine("[DEBUG] XML successfully loaded.");
 
                 string fullFilename = Path.GetFileNameWithoutExtension(filePath);
-                Console.WriteLine($"[DEBUG] Full Filename: {fullFilename}");
-
                 var fileFormat = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
+
                 if (fileFormat == null)
                 {
                     Console.WriteLine("[ERROR] Unsupported XML format.");
                     results.Add(new { filePath, error = "Unsupported XML format." });
                     continue;
                 }
-                Console.WriteLine($"[DEBUG] XML Format: {fileFormat}, Trim Length: {trimLength}");
 
                 string modelName = fullFilename.Substring(0, fullFilename.Length - trimLength);
-
-                // **Infer the texture folder from the filePath**
                 string textureFolder = Path.Combine(Path.GetDirectoryName(filePath), modelName);
                 Console.WriteLine($"[DEBUG] Inferred Texture Folder: {textureFolder}");
 
@@ -95,12 +84,14 @@ public class ImportController : ControllerBase
 
                 Console.WriteLine("[DEBUG] Calling GetData() with inferred texture folder...");
                 byte[] data = XmlMeta.GetData(doc, fileFormat, textureFolder);
+
                 if (data == null)
                 {
                     Console.WriteLine("[ERROR] Failed to process XML data.");
                     results.Add(new { filePath, error = "Failed to process XML data." });
                     continue;
                 }
+
                 Console.WriteLine($"[DEBUG] XML Data processed successfully. Data Length: {data.Length} bytes");
 
                 Console.WriteLine("[DEBUG] Loading RPF archive...");
@@ -112,48 +103,53 @@ public class ImportController : ControllerBase
                 RpfFile.CreateFile(rootDir, fullFilename, data);
                 Console.WriteLine("[DEBUG] File successfully imported into RPF.");
 
-                var outputFilePath = Path.Combine(outputFolder, modelName + Path.GetExtension(fullFilename));
-                Console.WriteLine($"[DEBUG] Saving file to output folder: {outputFilePath}");
-                string tempFilePath = Path.Combine(outputFolder, modelName + ".tmp");
-
-                try
+                // **Only write the file if outputFolder is provided**
+                string? outputFilePath = null;
+                if (!string.IsNullOrWhiteSpace(outputFolder))
                 {
-                    Console.WriteLine($"[DEBUG] Writing temp file: {tempFilePath}");
-                    System.IO.File.WriteAllBytes(tempFilePath, data);
-                    Console.WriteLine("[DEBUG] Temp file written successfully.");
+                    outputFilePath = Path.Combine(outputFolder, modelName + Path.GetExtension(fullFilename));
+                    Console.WriteLine($"[DEBUG] Saving file to output folder: {outputFilePath}");
 
-                    if (System.IO.File.Exists(outputFilePath))
+                    string tempFilePath = Path.Combine(outputFolder, modelName + ".tmp");
+
+                    try
                     {
-                        Console.WriteLine("[DEBUG] Existing file detected, attempting to delete...");
-                        System.IO.File.Delete(outputFilePath);
-                    }
+                        Console.WriteLine($"[DEBUG] Writing temp file: {tempFilePath}");
+                        System.IO.File.WriteAllBytes(tempFilePath, data);
+                        Console.WriteLine("[DEBUG] Temp file written successfully.");
 
-                    System.IO.File.Move(tempFilePath, outputFilePath);
-                    Console.WriteLine($"[DEBUG] Successfully moved temp file to {outputFilePath}");
-                }
-                catch (UnauthorizedAccessException ex)
-                {
-                    Console.WriteLine($"[ERROR] Access Denied: {ex.Message}");
-                    results.Add(new { filePath, error = "Access Denied: Ensure the process has write permissions." });
-                    continue;
-                }
-                catch (IOException ex)
-                {
-                    Console.WriteLine($"[ERROR] IO Exception: {ex.Message}");
-                    results.Add(new { filePath, error = "I/O Error: Another process may be using the file." });
-                    continue;
+                        if (System.IO.File.Exists(outputFilePath))
+                        {
+                            Console.WriteLine("[DEBUG] Existing file detected, attempting to delete...");
+                            System.IO.File.Delete(outputFilePath);
+                        }
+
+                        System.IO.File.Move(tempFilePath, outputFilePath);
+                        Console.WriteLine($"[DEBUG] Successfully moved temp file to {outputFilePath}");
+                    }
+                    catch (UnauthorizedAccessException ex)
+                    {
+                        Console.WriteLine($"[ERROR] Access Denied: {ex.Message}");
+                        results.Add(new { filePath, error = "Access Denied: Ensure the process has write permissions." });
+                        continue;
+                    }
+                    catch (IOException ex)
+                    {
+                        Console.WriteLine($"[ERROR] IO Exception: {ex.Message}");
+                        results.Add(new { filePath, error = "I/O Error: Another process may be using the file." });
+                        continue;
+                    }
                 }
 
                 results.Add(new
                 {
                     filePath,
-                    message = "File imported successfully into RPF and saved to output folder.",
+                    message = "File imported successfully into RPF.",
                     filename = fullFilename,
                     rpfArchivePath,
-                    outputFilePath,
+                    outputFilePath, // Might be null if outputFolder was not provided
                     textureFolder
                 });
-
             }
             catch (System.Xml.XmlException ex)
             {
@@ -174,4 +170,5 @@ public class ImportController : ControllerBase
 
         return Ok(results);
     }
+
 }
