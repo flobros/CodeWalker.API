@@ -1,48 +1,77 @@
-﻿using CodeWalker.GameFiles;
+﻿using System;
+using System.IO;
+using CodeWalker.GameFiles;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using System;
 
 var builder = WebApplication.CreateBuilder(args);
+// ✅ Add Logging Service
+builder.Logging.ClearProviders();
+builder.Logging.AddConsole(); // Ensures logs appear in the console
+builder.Logging.AddDebug();   // Allows logs to show in the Debug window (if using Visual Studio)
 
-string gtaPath = "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V";
 
-// ✅ Ensure GTA folder exists
+string gtaPath = "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V"; // 🔹 Change this if needed
+
+// ✅ Ensure GTA V directory exists
 if (!Directory.Exists(gtaPath))
 {
-    Console.Error.WriteLine($"Error: GTA V directory not found at {gtaPath}");
+    Console.Error.WriteLine($"[ERROR] GTA V directory not found at {gtaPath}");
     return;
 }
 
-// ✅ Load RPF decryption keys BEFORE registering services
+// ✅ Load RPF decryption keys BEFORE initializing services
 try
 {
-    Console.WriteLine("Loading RPF decryption keys...");
-    GTA5Keys.LoadFromPath(gtaPath);  // ✅ This must happen first
-    Console.WriteLine("Keys loaded successfully.");
+    Console.WriteLine("[INFO] Loading RPF decryption keys...");
+    GTA5Keys.LoadFromPath(gtaPath);  // ✅ Must be done before RPF operations
+    Console.WriteLine("[INFO] RPF decryption keys loaded successfully.");
 }
 catch (Exception ex)
 {
-    Console.Error.WriteLine($"Error loading keys: {ex.Message}");
+    Console.Error.WriteLine($"[ERROR] Failed to load RPF keys: {ex.Message}");
     return;
 }
 
 // ✅ Register services AFTER keys are loaded
-builder.Services.AddControllers();
-builder.Services.AddSingleton(new RpfService(gtaPath));  // ✅ Now safe to initialize
-builder.Services.AddSingleton<TextureService>();  // ✅ No longer depends on GameFileCache
+builder.Services.AddControllers();  // ✅ Ensures controllers are registered
+builder.Services.AddSingleton(new RpfService(gtaPath));
+builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
+{
+    long cacheSize = 2L * 1024 * 1024 * 1024; // 2GB Cache
+    double cacheTime = 60.0; // 60 seconds
+    string gtaFolderPath = "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V";
+    bool isGen9 = false; // Change if needed
+    string dlc = ""; // No specific DLC
+    bool enableMods = false;
+    string excludeFolders = "";
+
+    var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaFolderPath, isGen9, dlc, enableMods, excludeFolders);
+
+    void UpdateStatus(string message) => Console.WriteLine($"[GameFileCache] {message}");
+    void ErrorLog(string message) => Console.Error.WriteLine($"[GameFileCache ERROR] {message}");
+
+    gameFileCache.Init(UpdateStatus, ErrorLog);
+    return gameFileCache;
+});
 
 var app = builder.Build();
 
-// ✅ Use top-level route registrations
+// ✅ Use Logging in Application Lifecycle
+var logger = app.Services.GetRequiredService<ILogger<Program>>();
+logger.LogInformation("API is starting...");
+
+// ✅ Simple API endpoint for status check
 app.MapGet("/", () => "API is running.");
 app.MapControllers();
 
-// Cleanup on shutdown
+// ✅ Cleanup on shutdown
 app.Lifetime.ApplicationStopping.Register(() =>
 {
-    Console.WriteLine("Cleaning up resources...");
+    logger.LogInformation("Cleaning up resources...");
 });
+
+
 
 app.Run();

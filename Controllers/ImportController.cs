@@ -86,7 +86,8 @@ public class ImportController : ControllerBase
                 }
 
                 string modelName = fullFilename.Substring(0, fullFilename.Length - trimLength);
-                string textureFolder = Path.Combine(Path.GetDirectoryName(filePath), modelName);
+                string textureFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
+
                 Console.WriteLine($"[DEBUG] Inferred Texture Folder: {textureFolder}");
 
                 if (!Directory.Exists(textureFolder))
