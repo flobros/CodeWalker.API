@@ -2,7 +2,7 @@
 
 ### ✅ Extract Textures (Downloads textures from models)
 # This request extracts textures from the specified YDR files and saves them to disk.
-GET {{CodeWalkerAPI_HostAddress}}/api/download-files?filenames=ap1_02_planes003.ydr&filenames=apa_mp_apa_yacht.ydr&textures=true&xml=false&outputFolderPath=C:\GTA_FILES
+GET {{CodeWalkerAPI_HostAddress}}/api/download-files?filenames=ap1_02_planes003.ydr&filenames=prop_alien_egg_01.ydr&textures=true&xml=true&outputFolderPath=C:\GTA_FILES
 Accept: application/json
 
 ### ✅ With XML Conversion (Downloads files and converts to XML)
