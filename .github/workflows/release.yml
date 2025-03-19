@@ -11,16 +11,26 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
-      - name: Debug - List Files
+      - name: Debug - List Files Before Cloning
         run: ls -R
 
-      - name: Download CodeWalker source
-        run: git clone --recursive https://github.com/dexyfex/CodeWalker.git "${{ github.workspace }}/CodeWalker"
+      - name: Clone Only CodeWalker.Core Into ${{ github.workspace }}/CodeWalker.Core
+        run: |
+          git init CodeWalker.Core
+          cd CodeWalker.Core
+          git remote add origin https://github.com/dexyfex/CodeWalker.git
+          git config core.sparseCheckout true
+          echo "CodeWalker.Core/" >> .git/info/sparse-checkout
+          git pull origin master --depth=1
+          cd ..
+
+      - name: Debug - List Files After Cloning
+        run: ls -R
 
       - name: Verify CodeWalker.Core Exists
         shell: pwsh
         run: |
-          if (!(Test-Path "${{ github.workspace }}/CodeWalker/CodeWalker.Core/CodeWalker.Core.csproj")) {
+          if (!(Test-Path "${{ github.workspace }}/CodeWalker.Core/CodeWalker.Core.csproj")) {
             Write-Host "❌ CodeWalker.Core is missing!"
             exit 1
           } else {
@@ -31,12 +41,7 @@ jobs:
         uses: microsoft/setup-msbuild@v1
 
       - name: Restore NuGet packages
-        run: nuget restore "${{ github.workspace }}/CodeWalker/CodeWalker.sln"
-
-      - name: Build CodeWalker.Core
-        run: |
-          cd "${{ github.workspace }}/CodeWalker/CodeWalker.Core"
-          msbuild CodeWalker.Core.csproj /p:Configuration=Release
+        run: nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
 
       - name: Build CodeWalker.API
         run: |
