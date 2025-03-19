@@ -60,9 +60,11 @@ jobs:
           robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release/net9.0" "${{ github.workspace }}/flat-output" /E || exit 0
           echo "Contents of flat-output:"
           dir "${{ github.workspace }}/flat-output"
-               echo "Creating ZIP..."
+
+          echo "Creating ZIP..."
           powershell Compress-Archive -Path "${{ github.workspace }}/flat-output/*" -DestinationPath "${{ github.workspace }}/CodeWalker.API.zip"
-               echo "Checking if ZIP file exists:"
+
+          echo "Checking if ZIP file exists:"
           if not exist "${{ github.workspace }}/CodeWalker.API.zip" (
               echo "❌ ERROR: ZIP file was not created!"
               exit 1
@@ -70,9 +72,13 @@ jobs:
               echo "✅ ZIP file created successfully."
           )
 
+      - name: Debug - List Workspace Contents
+        shell: cmd
+        run: dir /s "${{ github.workspace }}"
+
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "**/CodeWalker.API.zip"
+          files: "${{ github.workspace }}/CodeWalker.API.zip"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
