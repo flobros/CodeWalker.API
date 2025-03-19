@@ -14,7 +14,7 @@ jobs:
         with:
           path: CodeWalker.API  # Clones into ${{ github.workspace }}/CodeWalker.API
 
-      - name: Clone Full CodeWalker Repo
+      - name: Clone Full CodeWalker Repo (for CodeWalker.Core)
         run: |
           git clone --depth=1 https://github.com/dexyfex/CodeWalker.git "${{ github.workspace }}/CodeWalkerRepo"
 
@@ -35,8 +35,10 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
 
-      - name: Restore NuGet Packages
-        run: nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
+      - name: Restore NuGet Packages for Both Projects
+        run: |
+          nuget restore "${{ github.workspace }}/CodeWalker.Core/CodeWalker.Core.csproj"
+          nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
 
       - name: Build CodeWalker.API
         run: |
