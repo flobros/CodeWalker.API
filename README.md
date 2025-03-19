@@ -12,7 +12,7 @@ The API reads its configuration from an `appsettings.json` file. You can also cr
 ```json
 {
   "GTAPath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
-  "Port": 5024
+  "Port": 5555
 }
 ```
 
@@ -21,7 +21,7 @@ To start the API, simply execute:
 ```sh
 CodeWalker.API.exe
 ```
-The API will run on the configured port (default: `5024`).
+The API will run on the configured port (default: `5555`).
 
 ## 🛠 Features
 - Extract and convert GTA V files (YDR, YTD, etc.)
@@ -36,19 +36,19 @@ Once the API is running, you can interact with it using Swagger UI or HTTP reque
 ### 🌐 Swagger UI (Recommended for Testing)
 No need for additional tools! Just open the Swagger UI in your browser to test endpoints interactively:
 ```
-http://localhost:5024
+http://localhost:5555
 ```
 You can use Swagger to send requests and inspect responses without deploying the API.
 
 ### 📝 Example Requests
 #### 🔍 Search for a File
 ```sh
-curl "http://localhost:5024/api/search-file?filename=prop_alien_egg_01.ydr"
+curl "http://localhost:5555/api/search-file?filename=prop_alien_egg_01.ydr"
 ```
 
 #### 📥 Download & Extract Files
 ```sh
-curl "http://localhost:5024/api/download-files?filenames=prop_alien_egg_01.ydr&xml=true&textures=true&outputFolderPath=C:\\GTA_FILES"
+curl "http://localhost:5555/api/download-files?filenames=prop_alien_egg_01.ydr&xml=true&textures=true&outputFolderPath=C:\\GTA_FILES"
 ```
 
 ## 🛠 Building from Source
