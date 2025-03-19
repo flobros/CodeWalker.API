@@ -1,0 +1,43 @@
+name: Build and Release CodeWalker API
+
+on:
+  push:
+    tags:
+      - "v*"  # Runs when a version tag like v1.0.0 is pushed
+
+jobs:
+  build:
+    runs-on: windows-latest  # Windows is required for CodeWalker
+
+    steps:
+      - name: Checkout your repo
+        uses: actions/checkout@v4
+
+      - name: Download CodeWalker source
+        run: git clone --recursive https://github.com/dexyfex/CodeWalker.git C:\CodeWalker
+
+      - name: Ensure CodeWalker.Core exists
+        run: |
+          if not exist "C:\CodeWalker\CodeWalker.Core" exit 1
+
+      - name: Setup MSBuild
+        uses: microsoft/setup-msbuild@v1
+
+      - name: Restore NuGet packages
+        run: nuget restore C:\CodeWalker\CodeWalker.sln
+
+      - name: Build CodeWalker.API (with CodeWalker.Core)
+        run: msbuild C:\CodeWalker\CodeWalker.API\CodeWalker.API.csproj /p:Configuration=Release
+
+      - name: Archive the built files
+        run: |
+          mkdir build-output
+          xcopy /E /I C:\CodeWalker\CodeWalker.API\bin\Release build-output
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: build-output/*
+          token: ${{ secrets.RELEASE_TOKEN }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
