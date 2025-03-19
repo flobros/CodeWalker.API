@@ -17,15 +17,17 @@ Accept: application/json
 
 ### ✅ With outputFolder (Writes to Disk + Imports to RPF)
 # This request imports the XML files into the RPF archive AND saves them to the specified output folder.
-POST {{CodeWalkerAPI_HostAddress}}/api/import-xml
-Content-Type: application/x-www-form-urlencoded
-filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_YDR_FILES\out\apa_mp_apa_yacht.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf&outputFolder=C:\GTA_YDR_FILES\out
+### ✅ With outputFolder (Writes to Disk + Imports to RPF)  
+# This request imports the XML files into the RPF archive AND saves them to the specified output folder.  
+POST {{CodeWalkerAPI_HostAddress}}/api/import-xml  
+Content-Type: application/x-www-form-urlencoded  
+filePaths=C:\GTA_FILES\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_FILES\ap1_02_planes003.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf&outputFolder=C:\GTA_FILES\out  
 
-### ✅ Without outputFolder (Only Imports to RPF, No File Saving)
-# This request imports the XML files into the RPF archive but does NOT save them to disk.
-POST {{CodeWalkerAPI_HostAddress}}/api/import-xml
-Content-Type: application/x-www-form-urlencoded
-filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_YDR_FILES\out\apa_mp_apa_yacht.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf
+### ✅ Without outputFolder (Only Imports to RPF, No File Saving)  
+# This request imports the XML files into the RPF archive but does NOT save them to disk.  
+POST {{CodeWalkerAPI_HostAddress}}/api/import-xml  
+Content-Type: application/x-www-form-urlencoded  
+filePaths=C:\GTA_FILES\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_FILES\ap1_02_planes003.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf  
 
 ### ✅ Search for Files in RPF Archives
 # This request searches for files in the RPF archive that match the given query.
