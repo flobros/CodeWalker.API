@@ -8,18 +8,17 @@ on:
 jobs:
   build:
     runs-on: windows-latest  # Windows is required for CodeWalker
-
     steps:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
       - name: Download CodeWalker source
-        run: git clone --recursive https://github.com/dexyfex/CodeWalker.git C:\CodeWalker
+        run: git clone --recursive https://github.com/dexyfex/CodeWalker.git CodeWalker
 
       - name: Ensure CodeWalker.Core exists
         shell: pwsh
         run: |
-          if (!(Test-Path "C:\CodeWalker\CodeWalker.Core")) {
+          if (!(Test-Path "CodeWalker/CodeWalker.Core")) {
             Write-Host "❌ CodeWalker.Core does not exist!"
             exit 1
           }
@@ -28,15 +27,15 @@ jobs:
         uses: microsoft/setup-msbuild@v1
 
       - name: Restore NuGet packages
-        run: nuget restore C:\CodeWalker\CodeWalker.sln
+        run: nuget restore CodeWalker/CodeWalker.sln
 
       - name: Build CodeWalker.API (with CodeWalker.Core)
-        run: msbuild C:\CodeWalker\CodeWalker.API\CodeWalker.API.csproj /p:Configuration=Release
+        run: msbuild CodeWalker/CodeWalker.API/CodeWalker.API.csproj /p:Configuration=Release
 
       - name: Archive the built files
         run: |
           mkdir build-output
-          xcopy /E /I C:\CodeWalker\CodeWalker.API\bin\Release build-output
+          xcopy /E /I CodeWalker/CodeWalker.API/bin/Release build-output
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
