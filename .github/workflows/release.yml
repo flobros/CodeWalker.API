@@ -53,10 +53,14 @@ jobs:
           echo "Contents of build-output:"
           dir "${{ github.workspace }}/build-output"
 
-      - name: Package Build Output as ZIP
+      - name: Package Build Output as ZIP (Flatten Structure)
         shell: cmd
         run: |
-          powershell Compress-Archive -Path "${{ github.workspace }}/build-output/*" -DestinationPath "${{ github.workspace }}/CodeWalker.API.zip"
+          mkdir "${{ github.workspace }}/flat-output"
+          robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release/net9.0" "${{ github.workspace }}/flat-output" /E || exit 0
+          echo "Contents of flat-output:"
+          dir "${{ github.workspace }}/flat-output"
+          powershell Compress-Archive -Path "${{ github.workspace }}/flat-output/*" -DestinationPath "${{ github.workspace }}/CodeWalker.API.zip"
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
