@@ -53,6 +53,18 @@ jobs:
           echo "Contents of build-output:"
           dir "${{ github.workspace }}/build-output"
 
+      - name: Package Build Output as ZIP
+        shell: cmd
+        run: |
+          powershell Compress-Archive -Path "${{ github.workspace }}/build-output/*" -DestinationPath "${{ github.workspace }}/CodeWalker.API.zip"
+
+      - name: Upload Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: "${{ github.workspace }}/CodeWalker.API.zip"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
