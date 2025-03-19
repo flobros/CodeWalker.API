@@ -35,6 +35,8 @@ catch (Exception ex)
 }
 
 // ✅ Register services AFTER keys are loaded
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
 builder.Services.AddControllers();  // ✅ Ensures controllers are registered
 builder.Services.AddSingleton(new RpfService(gtaPath));
 builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
@@ -62,8 +64,18 @@ var app = builder.Build();
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("API is starting...");
 
-// ✅ Simple API endpoint for status check
-app.MapGet("/", () => "API is running.");
+app.UseSwagger();
+app.UseSwaggerUI(c =>
+{
+    c.SwaggerEndpoint("/swagger/v1/swagger.json", "CodeWalker API v1");
+    c.RoutePrefix = ""; // Swagger will be available at http://localhost:5024
+});
+
+app.UseRouting();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
 app.MapControllers();
 
 // ✅ Cleanup on shutdown
