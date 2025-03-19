@@ -73,6 +73,6 @@ jobs:
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          files: "${{ github.workspace }}/CodeWalker.API.zip"
+          files: "**/CodeWalker.API.zip"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
