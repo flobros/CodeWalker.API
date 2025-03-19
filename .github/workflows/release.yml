@@ -3,16 +3,17 @@
 on:
   push:
     tags:
-      - "v*"  # Runs when a version tag like v1.0.0 is pushed
+      - "v*" # Runs when a version tag like v1.0.0 is pushed
 
 jobs:
   build:
-    runs-on: windows-latest  # Windows required for CodeWalker
+    runs-on: windows-latest # Windows required for CodeWalker
+
     steps:
       - name: Checkout CodeWalker.API Repo
         uses: actions/checkout@v4
         with:
-          path: CodeWalker.API  # Clones into ${{ github.workspace }}/CodeWalker.API
+          path: CodeWalker.API # Clones into ${{ github.workspace }}/CodeWalker.API
 
       - name: Clone Full CodeWalker Repo (for CodeWalker.Core)
         run: |
@@ -48,6 +49,7 @@ jobs:
       - name: Archive the Built Files
         shell: cmd
         run: |
+          @echo on
           mkdir "${{ github.workspace }}/build-output"
           robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release" "${{ github.workspace }}/build-output" /E || exit 0
           echo "Contents of build-output:"
@@ -56,6 +58,7 @@ jobs:
       - name: Package Build Output as ZIP (Flatten Structure)
         shell: cmd
         run: |
+          @echo on
           mkdir "${{ github.workspace }}/flat-output"
           robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release/net9.0" "${{ github.workspace }}/flat-output" /E || exit 0
           echo "Contents of flat-output:"
@@ -74,7 +77,9 @@ jobs:
 
       - name: Debug - List Workspace Contents
         shell: cmd
-        run: dir /s "${{ github.workspace }}"
+        run: |
+          @echo on
+          dir /s "${{ github.workspace }}"
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
