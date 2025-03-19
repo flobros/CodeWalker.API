@@ -48,7 +48,8 @@ jobs:
       - name: Archive the Built Files
         run: |
           mkdir "${{ github.workspace }}/build-output"
-          xcopy /E /I "${{ github.workspace }}/CodeWalker.API/bin/Release" "${{ github.workspace }}/build-output"
+          robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release" "${{ github.workspace }}/build-output" /E
+        shell: cmd
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
