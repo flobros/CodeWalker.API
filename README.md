@@ -1,131 +1,79 @@
-# CodeWalker API
+﻿# CodeWalker API
 
-This repository provides an API for interacting with CodeWalker, enabling file extraction, XML conversion, and texture handling for GTA V assets.
+CodeWalker API is a .NET 9 web API that allows extracting, converting, and interacting with GTA V assets using CodeWalker's libraries.
 
-## Prerequisites
+## 📥 Download & Install
+You can download the latest pre-built release from the [Releases](https://github.com/flobros/CodeWalker.API/releases) page. Extract and run the API without needing to build it manually.
 
-Before using this API, you must download and set up CodeWalker:
+## 🔧 Configuration
+The API reads its configuration from an `appsettings.json` file. You can also create an `appsettings.Development.json` file for local overrides.
 
-1. **Download CodeWalker**
-   - Clone or download CodeWalker from its official repository:
-     ```sh
-     git clone https://github.com/dexyfex/CodeWalker.git
-     ```
-   - Build CodeWalker using Visual Studio.
-
-2. **Download and Setup the CodeWalker API**
-   - Clone this repository:
-     ```sh
-     git clone https://github.com/flobros/CodeWalker.API
-     ```
-   - Navigate to the folder:
-     ```sh
-     cd CodeWalker.API
-     ```
-   - Restore dependencies and build:
-     ```sh
-     dotnet restore
-     dotnet build
-     ```
-
-## Running the API
-
-Start the API server with:
-
-```sh
- dotnet run
-```
-
-By default, the API runs on `http://localhost:5024/`.
-
-## API Endpoints
-
-### 1. Import XML Files into an RPF Archive
-
-This endpoint allows importing multiple XML files into an RPF archive while ensuring textures are correctly placed.
-
-#### **With `outputFolder` (Writes to Disk + Imports to RPF)**
-```sh
-curl -X POST "http://localhost:5024/api/import-xml" ^
-    -H "Content-Type: application/x-www-form-urlencoded" ^
-    -d "filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml" ^
-    -d "filePaths=C:\GTA_YDR_FILES\out\apa_mp_apa_yacht.ydr.xml" ^
-    -d "rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf" ^
-    -d "outputFolder=C:\GTA_YDR_FILES\out"
-```
-**Response:**
+### Example `appsettings.json`:
 ```json
-[
-  {
-    "filePath": "C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01.ydr.xml",
-    "message": "File imported successfully into RPF.",
-    "filename": "prop_alien_egg_01.ydr",
-    "rpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf",
-    "outputFilePath": "C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01.ydr",
-    "textureFolder": "C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01"
-  }
-]
+{
+  "GTAPath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
+  "Port": 5024
+}
 ```
 
-#### **Without `outputFolder` (Only Imports to RPF, No File Saving)**
+## 🚀 Running the API
+To start the API, simply execute:
 ```sh
-curl -X POST "http://localhost:5024/api/import-xml" ^
-    -H "Content-Type: application/x-www-form-urlencoded" ^
-    -d "filePaths=C:\GTA_YDR_FILES\out\prop_alien_egg_01.ydr.xml" ^
-    -d "filePaths=C:\GTA_YDR_FILES\out\apa_mp_apa_yacht.ydr.xml" ^
-    -d "rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf"
+CodeWalker.API.exe
 ```
-**Response:**
-```json
-[
-  {
-    "filePath": "C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01.ydr.xml",
-    "message": "File imported successfully into RPF.",
-    "filename": "prop_alien_egg_01.ydr",
-    "rpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf",
-    "outputFilePath": null,
-    "textureFolder": "C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01"
-  }
-]
+The API will run on the configured port (default: `5024`).
+
+## 🛠 Features
+- Extract and convert GTA V files (YDR, YTD, etc.)
+- Export models to XML
+- Extract textures
+- Search for files within RPF archives
+- Import XML files back into RPF
+
+## 📌 Usage
+Once the API is running, you can interact with it using Swagger UI or HTTP requests.
+
+### 🌐 Swagger UI (Recommended for Testing)
+No need for additional tools! Just open the Swagger UI in your browser to test endpoints interactively:
 ```
+http://localhost:5024
+```
+You can use Swagger to send requests and inspect responses without deploying the API.
 
-### 2. Download Files from an RPF Archive
-
-#### **With XML Conversion (Downloads files and converts to XML)**
+### 📝 Example Requests
+#### 🔍 Search for a File
 ```sh
-curl -X GET "http://localhost:5024/api/download-files?filenames=prop_alien_egg_01.ydr&filenames=apa_mp_apa_yacht.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out"
-```
-**Response:**
-```json
-[
-  {"filename":"prop_alien_egg_01.ydr","message":"XML and related files saved successfully.","xmlFilePath":"C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01.ydr.xml"}
-]
+curl "http://localhost:5024/api/search-file?filename=prop_alien_egg_01.ydr"
 ```
 
-#### **Without XML Conversion (Downloads files as they are)**
+#### 📥 Download & Extract Files
 ```sh
-curl -X GET "http://localhost:5024/api/download-files?filenames=prop_alien_egg_01.ytd&outputFolderPath=C:\GTA_YDR_FILES\out"
-```
-**Response:**
-```json
-[
-  {"filename":"prop_alien_egg_01.ydr","message":"File saved successfully.","outputFilePath":"C:\\GTA_YDR_FILES\\out\\prop_alien_egg_01.ydr"}
-]
+curl "http://localhost:5024/api/download-files?filenames=prop_alien_egg_01.ydr&xml=true&textures=true&outputFolderPath=C:\\GTA_FILES"
 ```
 
-### 3. Search for Files in RPF Archives
-```sh
-curl -X GET "http://localhost:5024/api/search-file?query=prop_alien_egg"
-```
-**Response:**
-```json
-[
-  "x64c.rpf\\levels\\gta5\\props\\lev_des\\lev_des.rpf\\prop_alien_egg_01.ydr",
-  "modstore\\new.rpf\\prop_alien_egg_01.ydr"
-]
-```
+## 🛠 Building from Source
+If you prefer to build the API manually, follow these steps:
+1. Clone the repository:
+   ```sh
+   git clone https://github.com/flobros/CodeWalker.API.git
+   cd CodeWalker.API
+   ```
+2. Restore dependencies:
+   ```sh
+   dotnet restore
+   ```
+3. Build the project:
+   ```sh
+   dotnet build --configuration Release
+   ```
+4. Run the API:
+   ```sh
+   dotnet run
+   ```
 
-## License
+## 📜 License
+This project is released under the MIT License.
 
-This project is licensed under the MIT License. See `LICENSE` for more details.
+## 🤝 Contributing
+Pull requests are welcome! If you encounter issues, feel free to open an [issue](https://github.com/flobros/CodeWalker.API/issues).
 
