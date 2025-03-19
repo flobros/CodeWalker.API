@@ -36,7 +36,7 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
 
-      - name: Restore NuGet Packages for Both Projects
+      - name: Restore NuGet Packages
         run: |
           nuget restore "${{ github.workspace }}/CodeWalker.Core/CodeWalker.Core.csproj"
           nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
@@ -46,28 +46,14 @@ jobs:
           cd "${{ github.workspace }}/CodeWalker.API"
           msbuild CodeWalker.API.csproj /p:Configuration=Release
 
-      - name: Archive the Built Files
+      - name: Package Build Output as ZIP
         shell: cmd
         run: |
           @echo on
-          mkdir "${{ github.workspace }}/build-output"
-          robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release" "${{ github.workspace }}/build-output" /E || exit 0
-          echo "Contents of build-output:"
-          dir "${{ github.workspace }}/build-output"
+          echo "Creating ZIP from bin/Release/net9.0..."
+          powershell Compress-Archive -Path "${{ github.workspace }}/CodeWalker.API/bin/Release/net9.0/*" -DestinationPath "${{ github.workspace }}/CodeWalker.API.zip"
 
-      - name: Package Build Output as ZIP (Flatten Structure)
-        shell: cmd
-        run: |
-          @echo on
-          mkdir "${{ github.workspace }}/flat-output"
-          robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release/net9.0" "${{ github.workspace }}/flat-output" /E || exit 0
-          echo "Contents of flat-output:"
-          dir "${{ github.workspace }}/flat-output"
-
-          echo "Creating ZIP..."
-          powershell Compress-Archive -Path "${{ github.workspace }}/flat-output/*" -DestinationPath "${{ github.workspace }}/CodeWalker.API.zip"
-
-          echo "Checking if ZIP file exists:"
+          echo "Checking if ZIP file exists..."
           if not exist "${{ github.workspace }}/CodeWalker.API.zip" (
               echo "❌ ERROR: ZIP file was not created!"
               exit 1
