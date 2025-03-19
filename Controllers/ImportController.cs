@@ -5,6 +5,7 @@ using System.Threading.Tasks;
 using CodeWalker.GameFiles;
 using System;
 using System.Collections.Generic;
+using Swashbuckle.AspNetCore.Annotations;
 
 
 
@@ -32,10 +33,16 @@ public class ImportController : ControllerBase
     }
 
     [HttpPost("import-xml")]
+    [SwaggerOperation(
+    Summary = "Imports XML files into an RPF archive",
+    Description = "Reads an XML file, processes it, and imports it into an RPF archive. Optionally saves the file to an output directory."
+)]
+    [SwaggerResponse(200, "File imported successfully into RPF", typeof(List<object>))]
+    [SwaggerResponse(400, "Bad request due to missing parameters")]
     public async Task<IActionResult> ImportXml(
-    [FromForm] List<string> filePaths,
-    [FromForm] string rpfArchivePath,
-    [FromForm] string? outputFolder = null) // Make outputFolder optional
+    [FromForm, SwaggerParameter("List of XML file paths to import, e.g., filePaths=C:\\GTA_FILES\\prop_alien_egg_01.ydr.xml&filePaths=C:\\GTA_FILES\\ap1_02_planes003.ydr.xml", Required = true)] List<string> filePaths,
+    [FromForm, SwaggerParameter("Path to the RPF archive, e.g., rpfArchivePath=C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf", Required = true)] string rpfArchivePath,
+    [FromForm, SwaggerParameter("Optional output folder where processed files are saved, e.g., outputFolder=C:\\GTA_FILES\\out")] string? outputFolder = "C:\\GTA_FILES\\out")
     {
         Console.WriteLine($"[DEBUG] Received Import Request");
         Console.WriteLine($"[DEBUG] Processing {filePaths.Count} files");

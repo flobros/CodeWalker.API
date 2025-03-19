@@ -1,5 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
+using Swashbuckle.AspNetCore.Annotations;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
@@ -9,34 +9,39 @@ using CodeWalker.GameFiles;
 [ApiController]
 public class DownloadController : ControllerBase
 {
-    private readonly ILogger<DownloadController> _logger; // ✅ Inject Logger
+    private readonly ILogger<DownloadController> _logger;
     private readonly RpfService _rpfService;
     private readonly TextureExtractor _textureExtractor;
 
-    public DownloadController(ILogger<DownloadController> logger, 
-                          RpfService rpfService, 
-                          GameFileCache gameFileCache, 
-                          ILogger<TextureExtractor> textureLogger)
-{
-    _logger = logger;
-    _rpfService = rpfService;
-    _textureExtractor = new TextureExtractor(gameFileCache, textureLogger); // ✅ Pass textureLogger
-}
-
+    public DownloadController(ILogger<DownloadController> logger,
+                              RpfService rpfService,
+                              GameFileCache gameFileCache,
+                              ILogger<TextureExtractor> textureLogger)
+    {
+        _logger = logger;
+        _rpfService = rpfService;
+        _textureExtractor = new TextureExtractor(gameFileCache, textureLogger);
+    }
 
     [HttpGet("download-files")]
+    [SwaggerOperation(
+        Summary = "Downloads and extracts files",
+        Description = "Extracts textures or converts YDR files to XML before saving them."
+    )]
+    [SwaggerResponse(200, "Successful operation", typeof(List<object>))]
+    [SwaggerResponse(400, "Bad request")]
     public IActionResult DownloadFiles(
-        [FromQuery] string[] filenames,
-        [FromQuery] bool xml = false,
-        [FromQuery] bool textures = false,
-        [FromQuery] string? outputFolderPath = null)
+        [FromQuery, SwaggerParameter("List of filenames (YDR files), e.g., filenames=prop_alien_egg_01.ydr&filenames=ap1_02_planes003.ydr", Required = true)] string[] filenames,
+        [FromQuery, SwaggerParameter("Convert files to XML (true/false), e.g., xml=true")] bool xml = true,
+        [FromQuery, SwaggerParameter("Extract textures from models (true/false), e.g., textures=true")] bool textures = true,
+        [FromQuery, SwaggerParameter("Output folder path where extracted files are saved, e.g., outputFolderPath=C:\\GTA_FILES", Required = true)] string outputFolderPath = "C:\\GTA_FILES")
     {
+        filenames = (filenames == null || filenames.Length == 0) ? new[] { "prop_alien_egg_01.ydr" } : filenames;
         if (filenames == null || filenames.Length == 0)
         {
             _logger.LogWarning("No filenames provided.");
             return BadRequest("At least one filename is required.");
         }
-
         if (string.IsNullOrEmpty(outputFolderPath))
         {
             _logger.LogWarning("No output folder path provided.");
@@ -61,10 +66,8 @@ public class DownloadController : ControllerBase
                 var (fileBytes, entry) = extractedFile.Value;
                 string filenameWithoutExt = Path.GetFileNameWithoutExtension(filename);
                 string objectFilePath = Path.Combine(outputFolderPath, filename);
-
                 _logger.LogInformation($"Processing file: {filename}");
 
-                // ✅ Handle XML Export
                 if (xml)
                 {
                     string newFilename;
@@ -75,13 +78,11 @@ public class DownloadController : ControllerBase
                         results.Add(new { filename, error = $"XML export unavailable for {Path.GetExtension(filename)}" });
                         continue;
                     }
-
                     string xmlFilePath = Path.Combine(outputFolderPath, $"{filenameWithoutExt}.ydr.xml");
                     System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
                     results.Add(new { filename, message = "XML saved successfully.", xmlFilePath });
                 }
 
-                // ✅ Handle Texture Extraction
                 if (textures)
                 {
                     string textureFolderPath = Path.Combine(outputFolderPath, filenameWithoutExt);
@@ -93,7 +94,6 @@ public class DownloadController : ControllerBase
                     results.Add(new { filename, message = "Textures extracted successfully.", textureFolderPath });
                 }
 
-                // ✅ Save raw file **ONLY IF XML IS FALSE**
                 if (!xml)
                 {
                     System.IO.File.WriteAllBytes(objectFilePath, fileBytes);
@@ -113,7 +113,6 @@ public class DownloadController : ControllerBase
                 results.Add(new { filename, error = ex.Message });
             }
         }
-
         return Ok(results);
     }
 }
