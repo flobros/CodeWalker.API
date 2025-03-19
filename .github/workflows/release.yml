@@ -12,30 +12,27 @@ jobs:
       - name: Checkout your repo
         uses: actions/checkout@v4
 
+      - name: Debug - List Files
+        run: ls -R
+
       - name: Download CodeWalker source
         run: git clone --recursive https://github.com/dexyfex/CodeWalker.git CodeWalker
-
-      - name: Ensure CodeWalker.Core exists
-        shell: pwsh
-        run: |
-          if (!(Test-Path "CodeWalker/CodeWalker.Core")) {
-            Write-Host "❌ CodeWalker.Core does not exist!"
-            exit 1
-          }
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
 
       - name: Restore NuGet packages
-        run: nuget restore CodeWalker/CodeWalker.sln
+        run: nuget restore CodeWalker.API/CodeWalker.API.csproj
 
-      - name: Build CodeWalker.API (with CodeWalker.Core)
-        run: msbuild CodeWalker/CodeWalker.API/CodeWalker.API.csproj /p:Configuration=Release
+      - name: Build CodeWalker.API
+        run: |
+          cd CodeWalker.API
+          msbuild CodeWalker.API.csproj /p:Configuration=Release
 
       - name: Archive the built files
         run: |
           mkdir build-output
-          xcopy /E /I CodeWalker/CodeWalker.API/bin/Release build-output
+          xcopy /E /I CodeWalker.API/bin/Release build-output
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
