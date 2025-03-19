@@ -1,4 +1,5 @@
 ﻿name: Build and Release CodeWalker API
+
 on:
   push:
     tags:
@@ -6,26 +7,20 @@ on:
 
 jobs:
   build:
-    runs-on: windows-latest  # Windows is required for CodeWalker
+    runs-on: windows-latest  # Windows required for CodeWalker
     steps:
-      - name: Checkout your repo
+      - name: Checkout CodeWalker.API Repo
         uses: actions/checkout@v4
+        with:
+          path: CodeWalker.API  # Clones into ${{ github.workspace }}/CodeWalker.API
 
-      - name: Debug - List Files Before Cloning
-        run: ls -R
-
-      - name: Clone Only CodeWalker.Core Into ${{ github.workspace }}/CodeWalker.Core
+      - name: Clone Full CodeWalker Repo
         run: |
-          git init CodeWalker.Core
-          cd CodeWalker.Core
-          git remote add origin https://github.com/dexyfex/CodeWalker.git
-          git config core.sparseCheckout true
-          echo "CodeWalker.Core/" >> .git/info/sparse-checkout
-          git pull origin master --depth=1
-          cd ..
+          git clone --depth=1 https://github.com/dexyfex/CodeWalker.git "${{ github.workspace }}/CodeWalkerRepo"
 
-      - name: Debug - List Files After Cloning
-        run: ls -R
+      - name: Move CodeWalker.Core to Workdirectory
+        run: |
+          move "${{ github.workspace }}\CodeWalkerRepo\CodeWalker.Core" "${{ github.workspace }}"
 
       - name: Verify CodeWalker.Core Exists
         shell: pwsh
@@ -40,7 +35,7 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
 
-      - name: Restore NuGet packages
+      - name: Restore NuGet Packages
         run: nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
 
       - name: Build CodeWalker.API
@@ -48,15 +43,15 @@ jobs:
           cd "${{ github.workspace }}/CodeWalker.API"
           msbuild CodeWalker.API.csproj /p:Configuration=Release
 
-      - name: Archive the built files
+      - name: Archive the Built Files
         run: |
-          mkdir build-output
-          xcopy /E /I "${{ github.workspace }}/CodeWalker.API/bin/Release" build-output
+          mkdir "${{ github.workspace }}/build-output"
+          xcopy /E /I "${{ github.workspace }}/CodeWalker.API/bin/Release" "${{ github.workspace }}/build-output"
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
-          files: build-output/*
+          files: ${{ github.workspace }}/build-output/*
           token: ${{ secrets.RELEASE_TOKEN }}
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
