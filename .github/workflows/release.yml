@@ -1,4 +1,4 @@
-name: Build and Release CodeWalker API
+﻿name: Build and Release CodeWalker API
 
 on:
   push:
@@ -17,8 +17,12 @@ jobs:
         run: git clone --recursive https://github.com/dexyfex/CodeWalker.git C:\CodeWalker
 
       - name: Ensure CodeWalker.Core exists
+        shell: pwsh
         run: |
-          if not exist "C:\CodeWalker\CodeWalker.Core" exit 1
+          if (!(Test-Path "C:\CodeWalker\CodeWalker.Core")) {
+            Write-Host "❌ CodeWalker.Core does not exist!"
+            exit 1
+          }
 
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
