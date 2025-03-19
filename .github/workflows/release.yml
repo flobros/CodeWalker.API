@@ -46,10 +46,11 @@ jobs:
           msbuild CodeWalker.API.csproj /p:Configuration=Release
 
       - name: Archive the Built Files
+        shell: pwsh
         run: |
-          mkdir "${{ github.workspace }}/build-output"
+          mkdir -Force "${{ github.workspace }}/build-output"
           robocopy "${{ github.workspace }}/CodeWalker.API/bin/Release" "${{ github.workspace }}/build-output" /E
-        shell: cmd
+          if ($LASTEXITCODE -eq 1) { exit 0 } 
 
       - name: Upload Release
         uses: softprops/action-gh-release@v2
