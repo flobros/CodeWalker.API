@@ -3,16 +3,18 @@ using System.Collections.Generic;
 using System.IO;
 using CodeWalker.GameFiles;
 
+
 public class RpfService
 {
     private readonly RpfManager _rpfManager;
+    private readonly ILogger<RpfService> _logger;
 
-    public RpfService(string gtaPath)
+    public RpfService(string gtaPath, ILogger<RpfService> logger)
     {
         _rpfManager = new RpfManager();
         _rpfManager.Init(gtaPath, false, Console.WriteLine, Console.Error.WriteLine);
-    }
-
+        _logger = logger;
+    }    
     public List<string> SearchFile(string filename)
     {
         var results = new List<string>();
@@ -43,20 +45,41 @@ public class RpfService
         throw new FileNotFoundException($"File '{filename}' not found.");
     }
 
-    public (byte[] fileBytes, RpfFileEntry entry)? ExtractFileWithEntry(string filename)
+    public (byte[] fileBytes, RpfFileEntry entry)? ExtractFileWithEntry(string fullRpfPath)
     {
+        Console.WriteLine($"[DEBUG] Searching for file in RPF: {fullRpfPath}");
+
+        //_logger.LogDebug("Listing all RPF entries:");
+        //Console.WriteLine("[DEBUG] Listing all RPF entries:");
+
         foreach (var entry in _rpfManager.EntryDict.Values)
         {
-            if (entry.Name.Equals(filename, StringComparison.OrdinalIgnoreCase))
+            if (entry is RpfFileEntry fileEntry)
             {
-                if (entry is RpfFileEntry fileEntry)
+                string entryFullPath = fileEntry.Path;
+
+                //// Print EXACT match comparison
+                //Console.WriteLine($"[DEBUG] Comparing requested: '{fullRpfPath}'");
+                //Console.WriteLine($"[DEBUG]       against entry: '{entryFullPath}'");
+
+                // Check if they match
+                if (entryFullPath.Equals(fullRpfPath, StringComparison.OrdinalIgnoreCase))
                 {
+                    Console.WriteLine($"[MATCH] Found: {entryFullPath}");
+                    _logger.LogInformation($"Match found for: {entryFullPath}");
                     return (fileEntry.File.ExtractFile(fileEntry), fileEntry);
                 }
             }
         }
-        return null; // ✅ Ensure the method can return null
+
+        Console.WriteLine($"[DEBUG] File not found in RPF: {fullRpfPath}");
+        _logger.LogWarning($"File not found in RPF: {fullRpfPath}");
+        return null;
     }
+
+
+
+
 
     public RpfFile LoadRpf(string rpfPath)
     {

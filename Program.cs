@@ -6,6 +6,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.OpenApi.Models;
+using Microsoft.Extensions.Logging;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -47,10 +48,9 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "CodeWalker API", Version = "v1" });
     c.EnableAnnotations();
 });
-
 builder.Services.AddControllers();
-builder.Services.AddSingleton(new RpfService(gtaPath));
 
+// ✅ Register GameFileCache
 builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
 {
     long cacheSize = 2L * 1024 * 1024 * 1024; // 2GB Cache
@@ -59,13 +59,19 @@ builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
     string dlc = "";
     bool enableMods = false;
     string excludeFolders = "";
-
     var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaPath, isGen9, dlc, enableMods, excludeFolders);
     gameFileCache.Init(
         message => Console.WriteLine($"[GameFileCache] {message}"),
         error => Console.Error.WriteLine($"[GameFileCache ERROR] {error}")
     );
     return gameFileCache;
+});
+
+// ✅ Register RpfService with logging support
+builder.Services.AddSingleton<RpfService>(serviceProvider =>
+{
+    var logger = serviceProvider.GetRequiredService<ILogger<RpfService>>();
+    return new RpfService(gtaPath, logger);
 });
 
 var app = builder.Build();
@@ -78,7 +84,7 @@ app.UseSwagger();
 app.UseSwaggerUI(c =>
 {
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CodeWalker API v1");
-    c.RoutePrefix = ""; // Swagger available at http://localhost:" + port);
+    c.RoutePrefix = ""; // Swagger available at http://localhost: + port
 });
 
 app.UseRouting();
