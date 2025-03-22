@@ -17,4 +17,9 @@
     <ProjectReference Include="..\CodeWalker.Core\CodeWalker.Core.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="Config\" />
+    <Folder Include="Models\" />
+  </ItemGroup>
+
 </Project>

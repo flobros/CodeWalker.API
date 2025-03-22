@@ -4,123 +4,146 @@ using System.Collections.Generic;
 using System.IO;
 using System.Text;
 using CodeWalker.GameFiles;
+using CodeWalker.API.Services; // ✅ Needed for ConfigService
+using Microsoft.Extensions.Logging;
 
-[Route("api")]
-[ApiController]
-public class DownloadController : ControllerBase
+namespace CodeWalker.API.Controllers
 {
-    private readonly ILogger<DownloadController> _logger;
-    private readonly RpfService _rpfService;
-    private readonly TextureExtractor _textureExtractor;
-
-    public DownloadController(ILogger<DownloadController> logger,
-                              RpfService rpfService,
-                              GameFileCache gameFileCache,
-                              ILogger<TextureExtractor> textureLogger)
+    [Route("api")]
+    [ApiController]
+    public class DownloadController : ControllerBase
     {
-        _logger = logger;
-        _rpfService = rpfService;
-        _textureExtractor = new TextureExtractor(gameFileCache, textureLogger);
-    }
+        private readonly ILogger<DownloadController> _logger;
+        private readonly RpfService _rpfService;
+        private readonly TextureExtractor _textureExtractor;
+        private readonly ConfigService _configService;
 
-    [HttpGet("download-files")]
-    [SwaggerOperation(
-        Summary = "Downloads and extracts files",
-        Description = "Extracts textures or converts YDR files to XML before saving them."
-    )]
-    [SwaggerResponse(200, "Successful operation", typeof(List<object>))]
-    [SwaggerResponse(400, "Bad request")]
-    public IActionResult DownloadFiles(
-        [FromQuery, SwaggerParameter("List of full RPF paths, e.g., fullPaths=dlc1.rpf\\x64\\models\\cdimages\\prop_alien_egg_01.ydr", Required = true)] string[] fullPaths,
-        [FromQuery, SwaggerParameter("Convert files to XML (true/false), e.g., xml=true")] bool xml = true,
-        [FromQuery, SwaggerParameter("Extract textures from models (true/false), e.g., textures=true")] bool textures = true,
-        [FromQuery, SwaggerParameter("Output folder path where extracted files are saved, e.g., outputFolderPath=C:\\GTA_FILES", Required = true)] string outputFolderPath = "C:\\GTA_FILES")
-    {
-        if (fullPaths == null || fullPaths.Length == 0)
+        public DownloadController(
+            ILogger<DownloadController> logger,
+            RpfService rpfService,
+            GameFileCache gameFileCache,
+            ILogger<TextureExtractor> textureLogger,
+            ConfigService configService) // ✅ Injected
         {
-            _logger.LogWarning("No full RPF paths provided.");
-            return BadRequest("At least one full RPF path is required.");
+            _logger = logger;
+            _rpfService = rpfService;
+            _textureExtractor = new TextureExtractor(gameFileCache, textureLogger);
+            _configService = configService;
         }
 
-        if (string.IsNullOrEmpty(outputFolderPath))
+        [HttpGet("download-files")]
+        [SwaggerOperation(
+    Summary = "Downloads and extracts files",
+    Description = "Extracts textures or converts YDR files to XML before saving them."
+)]
+        [SwaggerResponse(200, "Successful operation", typeof(List<object>))]
+        [SwaggerResponse(400, "Bad request")]
+        public IActionResult DownloadFiles(
+    [FromQuery, SwaggerParameter("List of full RPF paths", Required = true)]
+    string[] fullPaths,
+    [FromQuery] bool xml = true,
+    [FromQuery] bool textures = true
+)
         {
-            _logger.LogWarning("No output folder path provided.");
-            return BadRequest("An output folder path is required.");
-        }
-
-        Directory.CreateDirectory(outputFolderPath);
-        var results = new List<object>();
-
-        foreach (var fullRpfPath in fullPaths)
-        {
-            try
+            if (fullPaths == null || fullPaths.Length == 0)
             {
-                var extractedFile = _rpfService.ExtractFileWithEntry(fullRpfPath);
-                if (!extractedFile.HasValue)
+                _logger.LogWarning("No full RPF paths provided.");
+                return BadRequest("At least one full RPF path is required.");
+            }
+
+            var config = _configService.Get();
+            var codewalkerOutput = config.CodewalkerOutputDir;
+            var blenderOutput = config.BlenderOutputDir;
+
+            if (string.IsNullOrWhiteSpace(codewalkerOutput))
+            {
+                _logger.LogWarning("Configured output folder path is empty.");
+                return BadRequest("Output folder is not configured.");
+            }
+
+            Directory.CreateDirectory(codewalkerOutput);
+            var results = new List<object>();
+
+            foreach (var fullRpfPath in fullPaths)
+            {
+                try
                 {
-                    _logger.LogWarning($"File '{fullRpfPath}' not found.");
-                    results.Add(new { fullRpfPath, error = $"File '{fullRpfPath}' not found." });
-                    continue;
-                }
-
-                var (fileBytes, entry) = extractedFile.Value;
-                string filename = Path.GetFileName(fullRpfPath);
-                string filenameWithoutExt = Path.GetFileNameWithoutExtension(fullRpfPath);
-                string objectFilePath = Path.Combine(outputFolderPath, filename);
-
-                _logger.LogInformation($"Processing file: {fullRpfPath}");
-
-                if (xml)
-                {
-                    string newFilename;
-                    string xmlData = MetaXml.GetXml(entry, fileBytes, out newFilename, outputFolderPath);
-                    if (string.IsNullOrEmpty(xmlData))
+                    var extractedFile = _rpfService.ExtractFileWithEntry(fullRpfPath);
+                    if (!extractedFile.HasValue)
                     {
-                        _logger.LogWarning($"XML export unavailable for {Path.GetExtension(fullRpfPath)}");
-                        results.Add(new { fullRpfPath, error = $"XML export unavailable for {Path.GetExtension(fullRpfPath)}" });
+                        _logger.LogWarning($"File '{fullRpfPath}' not found.");
+                        results.Add(new { fullRpfPath, error = $"File '{fullRpfPath}' not found." });
                         continue;
                     }
 
-                    string ext = Path.GetExtension(fullRpfPath)?.TrimStart('.') ?? "bin"; // fallback if no extension
-                    string xmlFilePath = Path.Combine(outputFolderPath, $"{filenameWithoutExt}.{ext}.xml");
+                    var (fileBytes, entry) = extractedFile.Value;
+                    string filename = Path.GetFileName(fullRpfPath);
+                    string filenameWithoutExt = Path.GetFileNameWithoutExtension(fullRpfPath);
+                    string objectFilePath = Path.Combine(codewalkerOutput, filename);
 
-                    System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
-                    results.Add(new { fullRpfPath, message = "XML saved successfully.", xmlFilePath });
+                    if (xml)
+                    {
+                        string newFilename;
+                        string xmlData = MetaXml.GetXml(entry, fileBytes, out newFilename, codewalkerOutput);
+                        if (string.IsNullOrEmpty(xmlData))
+                        {
+                            results.Add(new { fullRpfPath, error = $"XML export unavailable for {Path.GetExtension(fullRpfPath)}" });
+                            continue;
+                        }
+
+                        string ext = Path.GetExtension(fullRpfPath)?.TrimStart('.') ?? "bin";
+                        string xmlFilePath = Path.Combine(codewalkerOutput, $"{filenameWithoutExt}.{ext}.xml");
+                        System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
+                        results.Add(new { fullRpfPath, message = "XML saved successfully.", xmlFilePath });
+                    }
+
+                    if (textures)
+                    {
+                        string textureFolder = Path.Combine(codewalkerOutput, filenameWithoutExt);
+                        Directory.CreateDirectory(textureFolder);
+                        string tempYdrPath = Path.Combine(Path.GetTempPath(), filename);
+                        System.IO.File.WriteAllBytes(tempYdrPath, fileBytes);
+                        _textureExtractor.ExtractTextures(fileBytes, entry, textureFolder);
+                        System.IO.File.Delete(tempYdrPath);
+
+                        results.Add(new { fullRpfPath, message = "Textures extracted successfully.", textureFolderPath = textureFolder });
+
+                        // ✅ Also copy to Blender Output Dir
+                        if (!string.IsNullOrWhiteSpace(blenderOutput))
+                        {
+                            string dest = Path.Combine(blenderOutput, filenameWithoutExt);
+                            if (Directory.Exists(dest)) Directory.Delete(dest, true);
+                            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                            CopyDirectory(textureFolder, dest);
+                            results.Add(new { fullRpfPath, message = "Textures copied to Blender output.", copiedTo = dest });
+                        }
+                    }
+
+                    if (!xml)
+                    {
+                        System.IO.File.WriteAllBytes(objectFilePath, fileBytes);
+                        results.Add(new { fullRpfPath, message = "File saved successfully.", objectFilePath });
+                    }
                 }
-
-                if (textures)
+                catch (Exception ex)
                 {
-                    string textureFolderPath = Path.Combine(outputFolderPath, filenameWithoutExt);
-                    Directory.CreateDirectory(textureFolderPath);
-
-                    string tempYdrPath = Path.Combine(Path.GetTempPath(), filename);
-                    System.IO.File.WriteAllBytes(tempYdrPath, fileBytes);
-                    _textureExtractor.ExtractTextures(fileBytes, entry, textureFolderPath);
-                    System.IO.File.Delete(tempYdrPath);
-
-                    results.Add(new { fullRpfPath, message = "Textures extracted successfully.", textureFolderPath });
+                    _logger.LogError($"Error processing {fullRpfPath}: {ex.Message}");
+                    results.Add(new { fullRpfPath, error = ex.Message });
                 }
+            }
 
-                if (!xml)
-                {
-                    System.IO.File.WriteAllBytes(objectFilePath, fileBytes);
-                    results.Add(new { fullRpfPath, message = "File saved successfully.", objectFilePath });
-                }
-
-                _logger.LogInformation($"Successfully processed file: {fullRpfPath}");
-            }
-            catch (FileNotFoundException)
-            {
-                _logger.LogError($"File not found: {fullRpfPath}");
-                results.Add(new { fullRpfPath, error = "File not found." });
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError($"Error processing {fullRpfPath}: {ex.Message}");
-                results.Add(new { fullRpfPath, error = ex.Message });
-            }
+            return Ok(results);
         }
 
-        return Ok(results);
+        private void CopyDirectory(string sourceDir, string targetDir)
+        {
+            Directory.CreateDirectory(targetDir);
+            foreach (var file in Directory.GetFiles(sourceDir))
+                System.IO.File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), true);
+
+            foreach (var dir in Directory.GetDirectories(sourceDir))
+                CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
+        }
+
     }
 }

@@ -6,15 +6,14 @@ using CodeWalker.GameFiles;
 using System;
 using System.Collections.Generic;
 using Swashbuckle.AspNetCore.Annotations;
-
-
+using CodeWalker.API.Services;
 
 [Route("api")]
 [ApiController]
 public class ImportController : ControllerBase
-
 {
     private readonly RpfService _rpfService;
+    private readonly ConfigService _configService;
 
     private static readonly HashSet<MetaFormat> ValidMetaFormats = new()
     {
@@ -27,39 +26,36 @@ public class ImportController : ControllerBase
         MetaFormat.Yfd, MetaFormat.Mrf
     };
 
-    public ImportController(RpfService rpfService)
+    public ImportController(RpfService rpfService, ConfigService configService)
     {
         _rpfService = rpfService;
+        _configService = configService;
     }
 
     [HttpPost("import-xml")]
     [SwaggerOperation(
-    Summary = "Imports XML files into an RPF archive",
-    Description = "Reads an XML file, processes it, and imports it into an RPF archive. Optionally saves the file to an output directory."
-)]
+        Summary = "Imports XML files into an RPF archive",
+        Description = "Reads an XML file, processes it, and imports it into an RPF archive. Uses configured output and RPF path.")]
     [SwaggerResponse(200, "File imported successfully into RPF", typeof(List<object>))]
     [SwaggerResponse(400, "Bad request due to missing parameters")]
-    public async Task<IActionResult> ImportXml(
-    [FromForm, SwaggerParameter("List of XML file paths to import, e.g., filePaths=C:\\GTA_FILES\\prop_alien_egg_01.ydr.xml&filePaths=C:\\GTA_FILES\\ap1_02_planes003.ydr.xml", Required = true)] List<string> filePaths,
-    [FromForm, SwaggerParameter("Path to the RPF archive, e.g., rpfArchivePath=C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf", Required = true)] string rpfArchivePath,
-    [FromForm, SwaggerParameter("Optional output folder where processed files are saved, e.g., outputFolder=C:\\GTA_FILES\\out")] string? outputFolder = "C:\\GTA_FILES\\out")
+    public async Task<IActionResult> ImportXml([
+        FromForm, SwaggerParameter("List of XML file paths to import", Required = true)
+    ] List<string> filePaths)
     {
-        Console.WriteLine($"[DEBUG] Received Import Request");
+        var config = _configService.Get();
+        string rpfArchivePath = config.RpfArchivePath;
+        string outputFolder = config.FivemOutputDir;
+
+        Console.WriteLine("[DEBUG] Received Import Request");
         Console.WriteLine($"[DEBUG] Processing {filePaths.Count} files");
         Console.WriteLine($"[DEBUG] RPF Archive Path: {rpfArchivePath}");
-        Console.WriteLine($"[DEBUG] Output Folder: {outputFolder ?? "Not Provided (Skipping file write)"}");
+        Console.WriteLine($"[DEBUG] Output Folder: {outputFolder}");
 
         if (filePaths == null || filePaths.Count == 0)
-        {
-            Console.WriteLine("[ERROR] No files provided.");
             return BadRequest("No files provided.");
-        }
 
         if (string.IsNullOrWhiteSpace(rpfArchivePath) || !System.IO.File.Exists(rpfArchivePath))
-        {
-            Console.WriteLine("[ERROR] Invalid or missing RPF archive path.");
-            return BadRequest("Invalid or missing RPF archive path.");
-        }
+            return BadRequest("Configured RPF archive path is invalid or missing.");
 
         var results = new List<object>();
 
@@ -69,25 +65,21 @@ public class ImportController : ControllerBase
 
             if (!System.IO.File.Exists(filePath))
             {
-                Console.WriteLine($"[ERROR] File not found: {filePath}");
                 results.Add(new { filePath, error = "File not found." });
                 continue;
             }
 
             try
             {
-                Console.WriteLine("[DEBUG] Reading XML data...");
                 string xmlText = await System.IO.File.ReadAllTextAsync(filePath);
                 var doc = new System.Xml.XmlDocument();
                 doc.LoadXml(xmlText);
-                Console.WriteLine("[DEBUG] XML successfully loaded.");
 
                 string fullFilename = Path.GetFileNameWithoutExtension(filePath);
                 var fileFormat = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
 
                 if (!ValidMetaFormats.Contains(fileFormat))
                 {
-                    Console.WriteLine("[ERROR] Unsupported XML format.");
                     results.Add(new { filePath, error = "Unsupported XML format." });
                     continue;
                 }
@@ -95,70 +87,49 @@ public class ImportController : ControllerBase
                 string modelName = fullFilename.Substring(0, fullFilename.Length - trimLength);
                 string textureFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
 
-                Console.WriteLine($"[DEBUG] Inferred Texture Folder: {textureFolder}");
-
                 if (!Directory.Exists(textureFolder))
                 {
-                    Console.WriteLine("[ERROR] Texture folder does not exist.");
                     results.Add(new { filePath, error = "Texture folder not found." });
                     continue;
                 }
 
-                Console.WriteLine("[DEBUG] Calling GetData() with inferred texture folder...");
                 byte[] data = XmlMeta.GetData(doc, fileFormat, textureFolder);
 
                 if (data == null)
                 {
-                    Console.WriteLine("[ERROR] Failed to process XML data.");
                     results.Add(new { filePath, error = "Failed to process XML data." });
                     continue;
                 }
 
-                Console.WriteLine($"[DEBUG] XML Data processed successfully. Data Length: {data.Length} bytes");
-
-                Console.WriteLine("[DEBUG] Loading RPF archive...");
                 var rpfFile = _rpfService.LoadRpf(rpfArchivePath);
                 var rootDir = rpfFile.Root;
-                Console.WriteLine("[DEBUG] RPF archive loaded successfully.");
-
-                Console.WriteLine($"[DEBUG] Importing file {fullFilename} into RPF...");
                 RpfFile.CreateFile(rootDir, fullFilename, data);
-                Console.WriteLine("[DEBUG] File successfully imported into RPF.");
 
-                // **Only write the file if outputFolder is provided**
                 string? outputFilePath = null;
                 if (!string.IsNullOrWhiteSpace(outputFolder))
                 {
-                    outputFilePath = Path.Combine(outputFolder, modelName + Path.GetExtension(fullFilename));
-                    Console.WriteLine($"[DEBUG] Saving file to output folder: {outputFilePath}");
+                    // Correct filename logic to avoid double-dot issue
+                    string ext = Path.GetExtension(fullFilename); // Should be ".ytyp" or similar
+                    string finalName = Path.ChangeExtension(modelName, ext);
+                    outputFilePath = Path.Combine(outputFolder, finalName);
 
                     string tempFilePath = Path.Combine(outputFolder, modelName + ".tmp");
 
                     try
                     {
-                        Console.WriteLine($"[DEBUG] Writing temp file: {tempFilePath}");
                         System.IO.File.WriteAllBytes(tempFilePath, data);
-                        Console.WriteLine("[DEBUG] Temp file written successfully.");
-
                         if (System.IO.File.Exists(outputFilePath))
-                        {
-                            Console.WriteLine("[DEBUG] Existing file detected, attempting to delete...");
                             System.IO.File.Delete(outputFilePath);
-                        }
-
                         System.IO.File.Move(tempFilePath, outputFilePath);
-                        Console.WriteLine($"[DEBUG] Successfully moved temp file to {outputFilePath}");
                     }
                     catch (UnauthorizedAccessException ex)
                     {
-                        Console.WriteLine($"[ERROR] Access Denied: {ex.Message}");
-                        results.Add(new { filePath, error = "Access Denied: Ensure the process has write permissions." });
+                        results.Add(new { filePath, error = "Access Denied: " + ex.Message });
                         continue;
                     }
                     catch (IOException ex)
                     {
-                        Console.WriteLine($"[ERROR] IO Exception: {ex.Message}");
-                        results.Add(new { filePath, error = "I/O Error: Another process may be using the file." });
+                        results.Add(new { filePath, error = "I/O Error: " + ex.Message });
                         continue;
                     }
                 }
@@ -169,28 +140,24 @@ public class ImportController : ControllerBase
                     message = "File imported successfully into RPF.",
                     filename = fullFilename,
                     rpfArchivePath,
-                    outputFilePath, // Might be null if outputFolder was not provided
+                    outputFilePath,
                     textureFolder
                 });
             }
             catch (System.Xml.XmlException ex)
             {
-                Console.WriteLine($"[ERROR] Invalid XML format: {ex.Message}");
                 results.Add(new { filePath, error = $"Invalid XML format: {ex.Message}" });
             }
             catch (FileNotFoundException ex)
             {
-                Console.WriteLine($"[ERROR] File not found: {ex.Message}");
                 results.Add(new { filePath, error = ex.Message });
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] General Exception: {ex.Message}");
                 results.Add(new { filePath, error = $"Error importing file: {ex.Message}" });
             }
         }
 
         return Ok(results);
     }
-
 }

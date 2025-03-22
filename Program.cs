@@ -7,6 +7,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Configuration;
 using Microsoft.OpenApi.Models;
 using Microsoft.Extensions.Logging;
+using CodeWalker.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -66,6 +67,8 @@ builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
     );
     return gameFileCache;
 });
+
+builder.Services.AddSingleton<ConfigService>();
 
 // ✅ Register RpfService with logging support
 builder.Services.AddSingleton<RpfService>(serviceProvider =>
