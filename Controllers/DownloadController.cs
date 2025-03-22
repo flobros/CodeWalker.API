@@ -81,7 +81,9 @@ public class DownloadController : ControllerBase
                         continue;
                     }
 
-                    string xmlFilePath = Path.Combine(outputFolderPath, $"{filenameWithoutExt}.ydr.xml");
+                    string ext = Path.GetExtension(fullRpfPath)?.TrimStart('.') ?? "bin"; // fallback if no extension
+                    string xmlFilePath = Path.Combine(outputFolderPath, $"{filenameWithoutExt}.{ext}.xml");
+
                     System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
                     results.Add(new { fullRpfPath, message = "XML saved successfully.", xmlFilePath });
                 }

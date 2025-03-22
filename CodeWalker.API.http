@@ -7,7 +7,7 @@ Accept: application/json
 
 ### ✅ With XML Conversion (Downloads files and converts to XML)
 # This request downloads the specified YDR files and converts them to XML before saving.
-GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\\levels\\gta5\\props\\lev_des.rpf\\prop_alien_egg_01.ydr&fullPaths=modstore\\new.rpf\prop_alien_egg_01.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out
+GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\levels\gta5\props\lev_des.rpf\prop_alien_egg_01.ydr&fullPaths=modstore\new.rpf\prop_alien_egg_01.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out
 Accept: application/json
 
 ### ✅ Without XML Conversion (Downloads files as they are)

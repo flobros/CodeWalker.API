@@ -7,127 +7,172 @@ using System.IO;
 public class TextureExtractor
 {
     private readonly GameFileCache _gameFileCache;
-    private readonly ILogger<TextureExtractor> _logger; // ✅ Inject logger
+    private readonly ILogger<TextureExtractor> _logger;
 
-
-    public TextureExtractor(GameFileCache cache, ILogger<TextureExtractor> logger) // ✅ Add logger
+    public TextureExtractor(GameFileCache cache, ILogger<TextureExtractor> logger)
     {
         _gameFileCache = cache;
         _logger = logger;
     }
 
     public void ExtractTextures(byte[] fileBytes, RpfFileEntry entry, string outputFolder)
-    {   
-        bool hasEmbeddedTextures = false;   
-        _logger.LogInformation($"Extracting textures from: {entry.Name}");
+    {
+        string ext = Path.GetExtension(entry.Name)?.ToLowerInvariant() ?? string.Empty;
+        _logger.LogInformation($"Extracting textures from: {entry.Name} (ext: {ext})");
 
-        // ✅ Load YDR from memory
-        YdrFile ydr = LoadYdrFile(fileBytes, entry);
-        if (ydr == null || ydr.Drawable == null)
+        HashSet<Texture> textures = new();
+        HashSet<string> missing = new();
+
+        var tryGetTextureFromYtd = new Func<uint, YtdFile, Texture?>((texHash, ytd) =>
         {
-            _logger.LogError($"Failed to load YDR file: {entry.Name}");
-            return;
-        }
-
-        HashSet<Texture> textures = new HashSet<Texture>();
-
-        // ✅ Check for embedded textures
-        if (ydr.Drawable.ShaderGroup?.TextureDictionary?.Textures?.data_items != null)
-        {
-            _logger.LogInformation($"Found {ydr.Drawable.ShaderGroup.TextureDictionary.Textures.data_items.Length} embedded textures.");
-            hasEmbeddedTextures = true;
-            foreach (var tex in ydr.Drawable.ShaderGroup.TextureDictionary.Textures.data_items)
+            if (ytd == null) return null;
+            int tries = 0;
+            while (!ytd.Loaded && tries < 500)
             {
-                textures.Add(tex);
+                System.Threading.Thread.Sleep(10);
+                tries++;
             }
-        }
-        else
+            return ytd.Loaded ? ytd.TextureDict?.Lookup(texHash) : null;
+        });
+
+        var tryGetTexture = new Func<uint, uint, Texture?>((texHash, txdHash) =>
         {
-            _logger.LogWarning($"No embedded textures found in {entry.Name}.");
-        }
-
-        if(!hasEmbeddedTextures)
-            { 
-            string ydrName = Path.GetFileNameWithoutExtension(entry.Name);
-            uint modelHash = entry.ShortNameHash;
-
-            // ✅ First, try direct hash from YDR name
-            uint textureDictionaryHash = JenkHash.GenHash(ydrName);
-            _logger.LogInformation($"Looking up YTD with direct Jenkins hash: {textureDictionaryHash}");
-
-            // ✅ Second, try archetype-based texture dictionary
-            var archetype = _gameFileCache.GetArchetype(modelHash);
-            if (archetype != null)
+            if (txdHash == 0) return null;
+            var ytdEntry = _gameFileCache.YtdDict.TryGetValue(txdHash, out var entry) ? entry : null;
+            var ytd = _gameFileCache.GetYtd(txdHash);
+            if (ytd != null && !ytd.Loaded && ytdEntry != null)
             {
-                _logger.LogInformation($"Using texture dictionary hash from archetype: {archetype.TextureDict.Hash}");
-                textureDictionaryHash = archetype.TextureDict.Hash;
+                var data = _gameFileCache.RpfMan.GetFileData(ytdEntry.Path);
+                ytd.Load(data, ytdEntry);
+                ytd.Loaded = true;
+                _logger.LogInformation($"✅ Manually loaded YTD: {ytdEntry.Path}");
             }
-            else
+            return tryGetTextureFromYtd(texHash, ytd);
+        });
+
+        var collectTextures = new Action<DrawableBase>((drawable) =>
+        {
+            if (drawable == null) return;
+
+            var embedded = drawable.ShaderGroup?.TextureDictionary?.Textures?.data_items;
+            if (embedded != null)
             {
-                _logger.LogWarning($"No archetype found for model hash: {modelHash}");
+                foreach (var tex in embedded)
+                    textures.Add(tex);
             }
 
-            // 🔍 Try to load YTD file (ONLY BY HASH)
-            _logger.LogInformation($"🔍 Checking game cache for YTD with hash: {textureDictionaryHash}...");
-            YtdFile ytd = _gameFileCache.GetYtd(textureDictionaryHash);
-
-            RpfFileEntry ytdEntry = _gameFileCache.GetYtdEntry(textureDictionaryHash);
-            byte[] ytdData = _gameFileCache.RpfMan.GetFileData(ytdEntry.Path);
-            ytd.Load(ytdData, ytdEntry);
-            ytd.Loaded = true;
-
-            if (ytd == null)
+            if (drawable.Owner is YptFile ypt && ypt.PtfxList?.TextureDictionary?.Textures?.data_items != null)
             {
-                _logger.LogWarning($"❌ YTD not found for hash: {textureDictionaryHash}");
+                foreach (var tex in ypt.PtfxList.TextureDictionary.Textures.data_items)
+                    textures.Add(tex);
                 return;
             }
-        
-            if (ytd != null && ytd.TextureDict?.Textures?.data_items != null)
+
+            var shaders = drawable.ShaderGroup?.Shaders?.data_items;
+            if (shaders == null) return;
+
+            uint archHash = 0;
+            if (drawable is Drawable dwbl)
             {
-                _logger.LogInformation($"✅ Found {ytd.TextureDict.Textures.data_items.Length} textures in YTD (hash {textureDictionaryHash}).");
-                foreach (var tex in ytd.TextureDict.Textures.data_items)
+                var name = dwbl.Name?.ToLowerInvariant()?.Replace(".#dr", "")?.Replace(".#dd", "");
+                if (!string.IsNullOrEmpty(name)) archHash = JenkHash.GenHash(name);
+            }
+            else if (drawable is FragDrawable fdbl && fdbl.Owner is YftFile yftFile && yftFile.RpfFileEntry != null)
+            {
+                archHash = (uint)yftFile.RpfFileEntry.ShortNameHash;
+            }
+
+            var arch = _gameFileCache.GetArchetype(archHash);
+            var txdHash = (arch != null && arch.TextureDict != null) ? arch.TextureDict.Hash : archHash;
+
+            foreach (var s in shaders)
+            {
+                if (s?.ParametersList?.Parameters == null) continue;
+                foreach (var p in s.ParametersList.Parameters)
                 {
-                    textures.Add(tex);
+                    if (p?.Data is Texture tex)
+                    {
+                        textures.Add(tex);
+                    }
+                    else if (p?.Data is TextureBase baseTex)
+                    {
+                        var texhash = baseTex.NameHash;
+                        var texResult = tryGetTexture(texhash, txdHash);
+
+                        if (texResult == null)
+                        {
+                            var ptxdhash = _gameFileCache.TryGetParentYtdHash(txdHash);
+                            while (ptxdhash != 0 && texResult == null)
+                            {
+                                texResult = tryGetTexture(texhash, ptxdhash);
+                                if (texResult == null)
+                                {
+                                    ptxdhash = _gameFileCache.TryGetParentYtdHash(ptxdhash);
+                                }
+                            }
+                        }
+
+                        if (texResult == null)
+                        {
+                            var ytd = _gameFileCache.TryGetTextureDictForTexture(texhash);
+                            texResult = tryGetTextureFromYtd(texhash, ytd);
+                        }
+
+                        if (texResult == null)
+                        {
+                            if (!string.IsNullOrEmpty(baseTex.Name))
+                                missing.Add(baseTex.Name);
+                            _logger.LogWarning($"Missing texture: {baseTex.Name}");
+                        }
+                        else
+                        {
+                            textures.Add(texResult);
+                        }
+                    }
                 }
             }
-            else
-            {
-                _logger.LogWarning($"⚠️ YTD (hash {textureDictionaryHash}) loaded but contains NO textures.");
-            }
+        });
+
+        switch (ext)
+        {
+            case ".ydr":
+                var ydr = RpfFile.GetFile<YdrFile>(entry, fileBytes);
+                if (ydr?.Drawable != null)
+                    collectTextures(ydr.Drawable);
+                break;
+            case ".yft":
+                var yft = RpfFile.GetFile<YftFile>(entry, fileBytes);
+                var f = yft?.Fragment;
+                if (f != null)
+                {
+                    collectTextures(f.Drawable);
+                    collectTextures(f.DrawableCloth);
+                    if (f.DrawableArray?.data_items != null)
+                    {
+                        foreach (var d in f.DrawableArray.data_items)
+                            collectTextures(d);
+                    }
+                    if (f.Cloths?.data_items != null)
+                    {
+                        foreach (var c in f.Cloths.data_items)
+                            collectTextures(c.Drawable);
+                    }
+                    var children = f.PhysicsLODGroup?.PhysicsLOD1?.Children?.data_items;
+                    if (children != null)
+                    {
+                        foreach (var child in children)
+                        {
+                            collectTextures(child.Drawable1);
+                            collectTextures(child.Drawable2);
+                        }
+                    }
+                }
+                break;
         }
 
         _logger.LogInformation($"Total textures to save: {textures.Count}");
         SaveTextures(textures, outputFolder);
     }
-
-
-
-
-
-    private YdrFile LoadYdrFile(byte[] fileBytes, RpfFileEntry entry)
-    {
-        // ✅ Check if the file is compressed and decompress it
-        if (BitConverter.ToUInt32(fileBytes, 0) == 0x37435352) // "RSC7" header
-        {
-            _logger.LogInformation($"[INFO] Decompressing YDR file: {entry.Name}");
-            fileBytes = ResourceBuilder.Decompress(fileBytes);
-        }
-
-        YdrFile ydr = new YdrFile();
-        ydr.Load(fileBytes, entry); // ✅ Pass entry for correct loading
-
-        if (ydr.Drawable?.ShaderGroup?.TextureDictionary == null)
-        {
-            _logger.LogWarning($"[WARNING] No embedded textures found in {entry.Name}");
-        }
-        else
-        {
-            _logger.LogInformation($"[INFO] Found {ydr.Drawable.ShaderGroup.TextureDictionary.Textures.data_items.Length} textures.");
-        }
-
-        return ydr;
-    }
-
 
     private void SaveTextures(HashSet<Texture> textures, string folder)
     {
@@ -141,7 +186,7 @@ public class TextureExtractor
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Failed to save texture {tex.Name}: {ex.Message}");
+                _logger.LogError($"Failed to save texture {tex.Name}: {ex.Message}");
             }
         }
     }
