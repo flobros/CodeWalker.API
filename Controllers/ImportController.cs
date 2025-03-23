@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Mvc;
+using Microsoft.Extensions.Logging;
 using System.IO;
 using System.Text;
 using System.Threading.Tasks;
@@ -12,6 +13,7 @@ using CodeWalker.API.Services;
 [ApiController]
 public class ImportController : ControllerBase
 {
+    private readonly ILogger<ImportController> _logger;
     private readonly RpfService _rpfService;
     private readonly ConfigService _configService;
 
@@ -26,8 +28,12 @@ public class ImportController : ControllerBase
         MetaFormat.Yfd, MetaFormat.Mrf
     };
 
-    public ImportController(RpfService rpfService, ConfigService configService)
+    public ImportController(
+        ILogger<ImportController> logger,
+        RpfService rpfService,
+        ConfigService configService)
     {
+        _logger = logger;
         _rpfService = rpfService;
         _configService = configService;
     }
@@ -46,10 +52,7 @@ public class ImportController : ControllerBase
         string rpfArchivePath = config.RpfArchivePath;
         string outputFolder = config.FivemOutputDir;
 
-        Console.WriteLine("[DEBUG] Received Import Request");
-        Console.WriteLine($"[DEBUG] Processing {filePaths.Count} files");
-        Console.WriteLine($"[DEBUG] RPF Archive Path: {rpfArchivePath}");
-        Console.WriteLine($"[DEBUG] Output Folder: {outputFolder}");
+        _logger.LogDebug("Received Import Request for {Count} files", filePaths?.Count ?? 0);
 
         if (filePaths == null || filePaths.Count == 0)
             return BadRequest("No files provided.");
@@ -61,7 +64,7 @@ public class ImportController : ControllerBase
 
         foreach (var filePath in filePaths)
         {
-            Console.WriteLine($"[DEBUG] Processing file: {filePath}");
+            _logger.LogDebug("Processing file: {FilePath}", filePath);
 
             if (!System.IO.File.Exists(filePath))
             {
@@ -85,12 +88,12 @@ public class ImportController : ControllerBase
                 }
 
                 string modelName = fullFilename.Substring(0, fullFilename.Length - trimLength);
-                string textureFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
+                string? textureFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
 
                 if (!Directory.Exists(textureFolder))
                 {
-                    results.Add(new { filePath, error = "Texture folder not found." });
-                    continue;
+                    _logger.LogWarning("Texture folder not found for {FilePath}. Proceeding without it.", filePath);
+                    textureFolder = null;
                 }
 
                 byte[] data = XmlMeta.GetData(doc, fileFormat, textureFolder);
@@ -108,11 +111,9 @@ public class ImportController : ControllerBase
                 string? outputFilePath = null;
                 if (!string.IsNullOrWhiteSpace(outputFolder))
                 {
-                    // Correct filename logic to avoid double-dot issue
-                    string ext = Path.GetExtension(fullFilename); // Should be ".ytyp" or similar
+                    string ext = Path.GetExtension(fullFilename);
                     string finalName = Path.ChangeExtension(modelName, ext);
                     outputFilePath = Path.Combine(outputFolder, finalName);
-
                     string tempFilePath = Path.Combine(outputFolder, modelName + ".tmp");
 
                     try
@@ -140,8 +141,7 @@ public class ImportController : ControllerBase
                     message = "File imported successfully into RPF.",
                     filename = fullFilename,
                     rpfArchivePath,
-                    outputFilePath,
-                    textureFolder
+                    outputFilePath
                 });
             }
             catch (System.Xml.XmlException ex)
