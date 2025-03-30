@@ -121,6 +121,17 @@ public class RpfService
         return currentDir!; 
     }
 
+    public int Preheat()
+    {
+        int count = 0;
+        foreach (var entry in _rpfManager.EntryDict.Values)
+        {
+            // Simply touching the entries ensures all are initialized
+            string path = entry.Path;
+            count++;
+        }
+        return count;
+    }
 
 
 }
