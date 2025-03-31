@@ -19,9 +19,21 @@ namespace CodeWalker.API.Controllers
         [HttpPost("set-config")]
         [SwaggerOperation(Summary = "Set config paths", Description = "Updates folder paths used by the backend.")]
         [SwaggerResponse(200, "Config updated")]
-        public IActionResult SetConfig([FromBody] ApiConfig config)
+        public IActionResult SetConfig([FromBody] ApiConfig updated)
         {
-            _configService.Set(config);
+            var current = _configService.Get();
+
+            var merged = new ApiConfig
+            {
+                CodewalkerOutputDir = updated.CodewalkerOutputDir ?? current.CodewalkerOutputDir,
+                BlenderOutputDir = updated.BlenderOutputDir ?? current.BlenderOutputDir,
+                FivemOutputDir = updated.FivemOutputDir ?? current.FivemOutputDir,
+                RpfArchivePath = updated.RpfArchivePath ?? current.RpfArchivePath,
+                GTAPath = updated.GTAPath ?? current.GTAPath,
+                Port = updated.Port != 0 ? updated.Port : current.Port
+            };
+
+            _configService.Set(merged);
             return Ok(new { message = "Configuration updated successfully." });
         }
 

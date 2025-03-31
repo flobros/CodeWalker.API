@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using CodeWalker.GameFiles;
-
+using Microsoft.Extensions.Logging;
 
 public class RpfService
 {
@@ -14,11 +14,11 @@ public class RpfService
         _rpfManager = new RpfManager();
         _rpfManager.Init(gtaPath, false, Console.WriteLine, Console.Error.WriteLine);
         _logger = logger;
-    }    
+    }
+
     public List<string> SearchFile(string filename)
     {
         var results = new List<string>();
-
         foreach (var entry in _rpfManager.EntryDict.Values)
         {
             if (entry.Name.Contains(filename, StringComparison.OrdinalIgnoreCase))
@@ -37,7 +37,7 @@ public class RpfService
             {
                 if (entry is RpfFileEntry fileEntry)
                 {
-                    Console.WriteLine($"Extracting {fileEntry.Path}...");
+                    _logger.LogDebug("Extracting {FilePath}...", fileEntry.Path);
                     return fileEntry.File.ExtractFile(fileEntry);
                 }
             }
@@ -47,64 +47,44 @@ public class RpfService
 
     public (byte[] fileBytes, RpfFileEntry entry)? ExtractFileWithEntry(string fullRpfPath)
     {
-        Console.WriteLine($"[DEBUG] Searching for file in RPF: {fullRpfPath}");
-
-        //_logger.LogDebug("Listing all RPF entries:");
-        //Console.WriteLine("[DEBUG] Listing all RPF entries:");
-
         foreach (var entry in _rpfManager.EntryDict.Values)
         {
             if (entry is RpfFileEntry fileEntry)
             {
-                string entryFullPath = fileEntry.Path;
-
-                //// Print EXACT match comparison
-                //Console.WriteLine($"[DEBUG] Comparing requested: '{fullRpfPath}'");
-                //Console.WriteLine($"[DEBUG]       against entry: '{entryFullPath}'");
-
-                // Check if they match
-                if (entryFullPath.Equals(fullRpfPath, StringComparison.OrdinalIgnoreCase))
+                _logger.LogDebug("[DEBUG] {FilePath}", fileEntry.Path);
+                if (fileEntry.Path.Equals(fullRpfPath, StringComparison.OrdinalIgnoreCase))
                 {
-                    Console.WriteLine($"[MATCH] Found: {entryFullPath}");
-                    _logger.LogInformation($"Match found for: {entryFullPath}");
+                    _logger.LogDebug("[MATCH] Found: {FilePath}", fileEntry.Path);
                     return (fileEntry.File.ExtractFile(fileEntry), fileEntry);
                 }
             }
         }
-
-        Console.WriteLine($"[DEBUG] File not found in RPF: {fullRpfPath}");
-        _logger.LogWarning($"File not found in RPF: {fullRpfPath}");
+        _logger.LogWarning("[DEBUG] File not found in RPF: {FullPath}", fullRpfPath);
         return null;
     }
 
-
-
-
-
     public RpfFile LoadRpf(string rpfPath)
     {
-        Console.WriteLine($"[DEBUG] Attempting to open RPF file directly: {rpfPath}");
+        _logger.LogDebug("[DEBUG] Attempting to open RPF file directly: {RpfPath}", rpfPath);
 
         if (!File.Exists(rpfPath))
         {
-            Console.WriteLine($"[ERROR] RPF archive not found: {rpfPath}");
+            _logger.LogError("[ERROR] RPF archive not found: {RpfPath}", rpfPath);
             throw new FileNotFoundException($"RPF archive not found: {rpfPath}");
         }
 
-        // **Manually open the RPF file like CodeWalker does**
         RpfFile rpfFile = new RpfFile(rpfPath, Path.GetFileName(rpfPath));
-        rpfFile.ScanStructure(Console.WriteLine, Console.Error.WriteLine);
+        rpfFile.ScanStructure(msg => _logger.LogDebug(msg), err => _logger.LogError(err));
 
         if (rpfFile == null || rpfFile.AllEntries == null)
         {
-            Console.WriteLine($"[ERROR] Failed to scan RPF structure: {rpfPath}");
+            _logger.LogError("[ERROR] Failed to scan RPF structure: {RpfPath}", rpfPath);
             throw new Exception($"Failed to load RPF: {rpfPath}");
         }
 
-        Console.WriteLine($"[DEBUG] Successfully loaded and scanned RPF: {rpfPath}");
+        _logger.LogDebug("[DEBUG] Successfully loaded and scanned RPF: {RpfPath}", rpfPath);
         return rpfFile;
     }
-
 
     public RpfDirectoryEntry FindDirectoryInRpf(RpfFile rpfFile, string folderPath)
     {
@@ -112,13 +92,12 @@ public class RpfService
         foreach (var part in folderPath.Split(Path.DirectorySeparatorChar))
         {
             currentDir = currentDir?.Directories.Find(d => d.Name.Equals(part, StringComparison.OrdinalIgnoreCase));
-
             if (currentDir == null)
             {
                 throw new Exception($"Directory not found inside RPF: {folderPath}");
             }
         }
-        return currentDir!; 
+        return currentDir!;
     }
 
     public int Preheat()
@@ -126,12 +105,9 @@ public class RpfService
         int count = 0;
         foreach (var entry in _rpfManager.EntryDict.Values)
         {
-            // Simply touching the entries ensures all are initialized
             string path = entry.Path;
             count++;
         }
         return count;
     }
-
-
 }

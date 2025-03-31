@@ -38,17 +38,25 @@ public class TextureExtractor
         var tryGetTexture = new Func<uint, uint, Texture?>((texHash, txdHash) =>
         {
             if (txdHash == 0) return null;
+
             var ytdEntry = _gameFileCache.YtdDict.TryGetValue(txdHash, out var entry) ? entry : null;
             var ytd = _gameFileCache.GetYtd(txdHash);
-            if (ytd != null && !ytd.Loaded && ytdEntry != null)
+
+            if (ytd == null)
+                return null;
+
+            if (!ytd.Loaded && ytdEntry != null)
             {
                 var data = _gameFileCache.RpfMan.GetFileData(ytdEntry.Path);
                 ytd.Load(data, ytdEntry);
                 ytd.Loaded = true;
                 _logger.LogInformation($"✅ Manually loaded YTD: {ytdEntry.Path}");
             }
+
+            // By this point, `ytd` is confirmed non-null
             return tryGetTextureFromYtd(texHash, ytd);
         });
+
 
         var collectTextures = new Action<DrawableBase>((drawable) =>
         {
@@ -83,7 +91,7 @@ public class TextureExtractor
             }
 
             var arch = _gameFileCache.GetArchetype(archHash);
-            var txdHash = (arch != null && arch.TextureDict != null) ? arch.TextureDict.Hash : archHash;
+            var txdHash = (arch != null) ? arch.TextureDict.Hash : archHash;
 
             foreach (var s in shaders)
             {

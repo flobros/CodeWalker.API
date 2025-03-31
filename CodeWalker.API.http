@@ -1,4 +1,4 @@
-﻿@CodeWalkerAPI_HostAddress = http://localhost:5024
+﻿@CodeWalkerAPI_HostAddress = http://localhost:5555
 
 ### ✅ Extract Textures (Downloads textures from models)
 # This request extracts textures from the specified YDR files and saves them to disk.
@@ -33,3 +33,13 @@ filePaths=C:\GTA_FILES\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_FILES\ap1_02_p
 # This request searches for files in the RPF archive that match the given query.
 GET {{CodeWalkerAPI_HostAddress}}/api/search-file?filename=prop_alien_egg_01
 Accept: application/json
+
+### ✅ Replace File in RPF (Relative Path)
+# Replaces 'prop_alien_egg_01_edit.ydr' inside 'modstore/new.rpf'
+# The archive path is resolved using the configured GTAPath.
+POST {{CodeWalkerAPI_HostAddress}}/api/replace-file?rpfFilePath=modstore/new.rpf&localFilePath=C:\GTA_FILES\fivem_out\prop_alien_egg_01_edit.ydr
+
+
+### ✅ Replace File in RPF (Absolute Path)
+# Replaces 'prop_alien_egg_01_edit.ydr' in an explicitly defined archive path.
+POST {{CodeWalkerAPI_HostAddress}}/api/replace-file?rpfFilePath=C:\\Program%20Files\\Rockstar%20Games\\Grand%20Theft%20Auto%20V\\modstore\\new.rpf&localFilePath=C:\\GTA_FILES\\fivem_out\\prop_alien_egg_01_edit.ydr

@@ -8,14 +8,26 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.OpenApi.Models;
+using CodeWalker.API.Models;
 
 // ✅ Create the builder
 var builder = WebApplication.CreateBuilder(args);
 
-// ✅ Load configuration from appsettings.json
+// ✅ Load configuration
 builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
-string gtaPath = builder.Configuration.GetValue<string>("GTAPath") ?? "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V";
-int port = builder.Configuration.GetValue<int>("Port", 5024); // Default to 5024
+
+// ✅ Bind ApiConfig from configuration
+builder.Services.Configure<ApiConfig>(builder.Configuration);
+builder.Services.AddSingleton(serviceProvider =>
+{
+    return serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiConfig>>().Value;
+});
+
+// ✅ Load config directly from disk (overrides appsettings if saved)
+var configService = new ConfigService();
+var config = configService.Get();
+string gtaPath = config.GTAPath;
+int port = config.Port;
 
 // ✅ Logging setup
 builder.Logging.ClearProviders();
@@ -81,6 +93,9 @@ builder.Services.AddSingleton<RpfService>(serviceProvider =>
 // ✅ Build the app
 var app = builder.Build();
 
+// ✅ Bind the server to the configured port
+app.Urls.Add($"http://0.0.0.0:{port}");
+
 // ✅ Logging API startup
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation($"API is starting on port {port}...");
@@ -100,15 +115,14 @@ app.MapControllers();
 // ✅ (Cache) preheating
 var rpfService = app.Services.GetRequiredService<RpfService>();
 int count = rpfService.Preheat();
+
 try
 {
     var gameFileCache = app.Services.GetRequiredService<GameFileCache>();
     Console.WriteLine("[Startup] Preloading cache with known meta types...");
-
     // Preload by hash
     uint hash = JenkHash.GenHash("prop_alien_egg_01");
     var ydr = gameFileCache.GetYdr(hash);
-
     if (ydr != null)
         Console.WriteLine("[Startup] YDR preloaded successfully.");
     else
@@ -119,8 +133,7 @@ catch (Exception ex)
     Console.WriteLine($"[Startup ERROR] Cache preloading failed: {ex.Message}");
 }
 
-
 logger.LogInformation($"[Startup] Preheated RPF with {count} entries.");
 
 // ✅ Run the app
-app.Run($"http://0.0.0.0:{port}");
+app.Run();
