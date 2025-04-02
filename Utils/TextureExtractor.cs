@@ -23,39 +23,83 @@ public class TextureExtractor
         HashSet<Texture> textures = new();
         HashSet<string> missing = new();
 
-        var tryGetTextureFromYtd = new Func<uint, YtdFile, Texture?>((texHash, ytd) =>
+        var tryGetTextureFromYtd = new Func<uint, YtdFile?, Texture?>((texHash, ytd) =>
         {
             if (ytd == null) return null;
-            int tries = 0;
-            while (!ytd.Loaded && tries < 500)
+            if (!ytd.Loaded)
             {
-                System.Threading.Thread.Sleep(10);
-                tries++;
+                _logger.LogWarning("YTD was not marked as loaded before access.");
+                return null;
             }
-            return ytd.Loaded ? ytd.TextureDict?.Lookup(texHash) : null;
+            var tex = ytd.TextureDict?.Lookup(texHash);
+            _logger.LogDebug($"▶ texHash {texHash:X8} → Found in TextureDict: {(tex != null)}");
+            return tex;
         });
 
         var tryGetTexture = new Func<uint, uint, Texture?>((texHash, txdHash) =>
         {
-            if (txdHash == 0) return null;
+            Texture? texResult = null;
 
-            var ytdEntry = _gameFileCache.YtdDict.TryGetValue(txdHash, out var entry) ? entry : null;
-            var ytd = _gameFileCache.GetYtd(txdHash);
-
-            if (ytd == null)
-                return null;
-
-            if (!ytd.Loaded && ytdEntry != null)
+            if (txdHash != 0)
             {
-                var data = _gameFileCache.RpfMan.GetFileData(ytdEntry.Path);
-                ytd.Load(data, ytdEntry);
-                ytd.Loaded = true;
-                _logger.LogInformation($"✅ Manually loaded YTD: {ytdEntry.Path}");
+                if (_gameFileCache.YtdDict.TryGetValue(txdHash, out var ytdEntry) && ytdEntry != null)
+                {
+                    var ytd = _gameFileCache.GetYtd(txdHash);
+                    if (ytd == null || !ytd.Loaded)
+                    {
+                        try
+                        {
+                            var data = _gameFileCache.RpfMan.GetFileData(ytdEntry.Path);
+                            ytd = new YtdFile();
+                            ytd.Load(data, ytdEntry);
+                            ytd.Loaded = true;
+                            _logger.LogDebug($"✅ Lazily loaded YTD: {ytdEntry.Path}");
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning($"❌ Failed to load YTD {ytdEntry.Path}: {ex.Message}");
+                            return null;
+                        }
+                    }
+
+                    texResult = tryGetTextureFromYtd(texHash, ytd);
+                    if (texResult != null)
+                        return texResult;
+                }
             }
 
-            // By this point, `ytd` is confirmed non-null
-            return tryGetTextureFromYtd(texHash, ytd);
+            // 👇 Brute-force fallback (CodeWalker GUI does this too)
+            foreach (var fallbackEntry in _gameFileCache.YtdDict.Values)
+            {
+                if (fallbackEntry == null) continue;
+
+                try
+                {
+                    var data = _gameFileCache.RpfMan.GetFileData(fallbackEntry.Path);
+                    var fallbackYtd = new YtdFile();
+                    fallbackYtd.Load(data, fallbackEntry);
+                    fallbackYtd.Loaded = true;
+
+                    var fallbackTex = tryGetTextureFromYtd(texHash, fallbackYtd);
+                    if (fallbackTex != null)
+                    {
+                        _logger.LogDebug($"💥 Fallback hit in {fallbackEntry.Path}");
+                        return fallbackTex;
+                    }
+                }
+                catch
+                {
+                    // ignore broken YTDs
+                }
+            }
+
+            return null;
         });
+
+
+
+
+
 
 
         var collectTextures = new Action<DrawableBase>((drawable) =>
@@ -91,7 +135,13 @@ public class TextureExtractor
             }
 
             var arch = _gameFileCache.GetArchetype(archHash);
+            if (arch == null)
+            {
+                _logger.LogWarning($"⚠️ No archetype found for hash {archHash:X8} (name: '{(drawable is Drawable d ? d.Name : "unknown")}')");
+            }
+
             var txdHash = (arch != null) ? arch.TextureDict.Hash : archHash;
+
 
             foreach (var s in shaders)
             {

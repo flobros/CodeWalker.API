@@ -74,10 +74,16 @@ builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
     string excludeFolders = "";
 
     var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaPath, isGen9, dlc, enableMods, excludeFolders);
+
+    gameFileCache.EnableDlc = true; // this ensures Init() runs InitDlc()
+
     gameFileCache.Init(
         message => Console.WriteLine($"[GameFileCache] {message}"),
         error => Console.Error.WriteLine($"[GameFileCache ERROR] {error}")
     );
+
+    Console.WriteLine("[Startup] Archetypes loaded: " + gameFileCache.YtypDict?.Count);
+
     return gameFileCache;
 });
 
@@ -120,6 +126,7 @@ try
 {
     var gameFileCache = app.Services.GetRequiredService<GameFileCache>();
     Console.WriteLine("[Startup] Preloading cache with known meta types...");
+
     // Preload by hash
     uint hash = JenkHash.GenHash("prop_alien_egg_01");
     var ydr = gameFileCache.GetYdr(hash);
@@ -127,6 +134,8 @@ try
         Console.WriteLine("[Startup] YDR preloaded successfully.");
     else
         Console.WriteLine("[Startup] YDR not found in archive.");
+
+    Console.WriteLine("[Startup] Archetype dict contains: " + gameFileCache.GetArchetype(hash)?.Name);
 }
 catch (Exception ex)
 {
