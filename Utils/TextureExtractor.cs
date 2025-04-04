@@ -23,7 +23,7 @@ public class TextureExtractor
         HashSet<Texture> textures = new();
         HashSet<string> missing = new();
 
-        var tryGetTextureFromYtd = new Func<uint, YtdFile?, Texture?>((texHash, ytd) =>
+        Texture? TryGetTextureFromYtd(uint texHash, YtdFile? ytd)
         {
             if (ytd == null) return null;
             if (!ytd.Loaded)
@@ -34,9 +34,9 @@ public class TextureExtractor
             var tex = ytd.TextureDict?.Lookup(texHash);
             _logger.LogDebug($"▶ texHash {texHash:X8} → Found in TextureDict: {(tex != null)}");
             return tex;
-        });
+        }
 
-        var tryGetTexture = new Func<uint, uint, Texture?>((texHash, txdHash) =>
+        Texture? TryGetTexture(uint texHash, uint txdHash)
         {
             Texture? texResult = null;
 
@@ -61,51 +61,58 @@ public class TextureExtractor
                             return null;
                         }
                     }
-
-                    texResult = tryGetTextureFromYtd(texHash, ytd);
+                    texResult = TryGetTextureFromYtd(texHash, ytd);
                     if (texResult != null)
                         return texResult;
                 }
             }
 
-            // 👇 Brute-force fallback (CodeWalker GUI does this too)
-            foreach (var fallbackEntry in _gameFileCache.YtdDict.Values)
+            var visited = new HashSet<uint>();
+            var ptxdhash = _gameFileCache.TryGetParentYtdHash(txdHash);
+            while (ptxdhash != 0 && texResult == null && !visited.Contains(ptxdhash))
             {
-                if (fallbackEntry == null) continue;
-
-                try
+                visited.Add(ptxdhash);
+                texResult = TryGetTexture(texHash, ptxdhash);
+                if (texResult == null)
                 {
-                    var data = _gameFileCache.RpfMan.GetFileData(fallbackEntry.Path);
-                    var fallbackYtd = new YtdFile();
-                    fallbackYtd.Load(data, fallbackEntry);
-                    fallbackYtd.Loaded = true;
-
-                    var fallbackTex = tryGetTextureFromYtd(texHash, fallbackYtd);
-                    if (fallbackTex != null)
-                    {
-                        _logger.LogDebug($"💥 Fallback hit in {fallbackEntry.Path}");
-                        return fallbackTex;
-                    }
-                }
-                catch
-                {
-                    // ignore broken YTDs
+                    ptxdhash = _gameFileCache.TryGetParentYtdHash(ptxdhash);
                 }
             }
 
-            return null;
-        });
+            if (texResult == null)
+            {
+                var fallbackYtd = _gameFileCache.TryGetTextureDictForTexture(texHash);
+                texResult = TryGetTextureFromYtd(texHash, fallbackYtd);
+            }
 
+            if (texResult == null)
+            {
+                foreach (var fallbackEntry in _gameFileCache.YtdDict.Values)
+                {
+                    if (fallbackEntry == null) continue;
+                    try
+                    {
+                        var data = _gameFileCache.RpfMan.GetFileData(fallbackEntry.Path);
+                        var fallbackYtd = new YtdFile();
+                        fallbackYtd.Load(data, fallbackEntry);
+                        fallbackYtd.Loaded = true;
+                        texResult = TryGetTextureFromYtd(texHash, fallbackYtd);
+                        if (texResult != null)
+                        {
+                            _logger.LogDebug($"💥 Fallback hit in {fallbackEntry.Path}");
+                            return texResult;
+                        }
+                    }
+                    catch { }
+                }
+            }
 
+            return texResult;
+        }
 
-
-
-
-
-        var collectTextures = new Action<DrawableBase>((drawable) =>
+        void CollectTextures(DrawableBase drawable)
         {
             if (drawable == null) return;
-
             var embedded = drawable.ShaderGroup?.TextureDictionary?.Textures?.data_items;
             if (embedded != null)
             {
@@ -142,7 +149,6 @@ public class TextureExtractor
 
             var txdHash = (arch != null) ? arch.TextureDict.Hash : archHash;
 
-
             foreach (var s in shaders)
             {
                 if (s?.ParametersList?.Parameters == null) continue;
@@ -155,73 +161,60 @@ public class TextureExtractor
                     else if (p?.Data is TextureBase baseTex)
                     {
                         var texhash = baseTex.NameHash;
-                        var texResult = tryGetTexture(texhash, txdHash);
+                        var texResult = TryGetTexture(texhash, txdHash);
 
-                        if (texResult == null)
+                        if (texResult == null && !string.IsNullOrEmpty(baseTex.Name))
                         {
-                            var ptxdhash = _gameFileCache.TryGetParentYtdHash(txdHash);
-                            while (ptxdhash != 0 && texResult == null)
-                            {
-                                texResult = tryGetTexture(texhash, ptxdhash);
-                                if (texResult == null)
-                                {
-                                    ptxdhash = _gameFileCache.TryGetParentYtdHash(ptxdhash);
-                                }
-                            }
-                        }
-
-                        if (texResult == null)
-                        {
-                            var ytd = _gameFileCache.TryGetTextureDictForTexture(texhash);
-                            texResult = tryGetTextureFromYtd(texhash, ytd);
-                        }
-
-                        if (texResult == null)
-                        {
-                            if (!string.IsNullOrEmpty(baseTex.Name))
-                                missing.Add(baseTex.Name);
+                            missing.Add(baseTex.Name);
                             _logger.LogWarning($"Missing texture: {baseTex.Name}");
                         }
-                        else
+                        else if (texResult != null)
                         {
                             textures.Add(texResult);
                         }
                     }
                 }
             }
-        });
+        }
 
         switch (ext)
         {
             case ".ydr":
                 var ydr = RpfFile.GetFile<YdrFile>(entry, fileBytes);
                 if (ydr?.Drawable != null)
-                    collectTextures(ydr.Drawable);
+                    CollectTextures(ydr.Drawable);
                 break;
+
             case ".yft":
+                _logger.LogDebug("▶ Begin YFT processing");
                 var yft = RpfFile.GetFile<YftFile>(entry, fileBytes);
                 var f = yft?.Fragment;
                 if (f != null)
                 {
-                    collectTextures(f.Drawable);
-                    collectTextures(f.DrawableCloth);
+                    CollectTextures(f.Drawable);
+                    _logger.LogDebug("▶ After Drawable");
+                    CollectTextures(f.DrawableCloth);
+                    _logger.LogDebug("▶ After DrawableCloth");
+
                     if (f.DrawableArray?.data_items != null)
                     {
                         foreach (var d in f.DrawableArray.data_items)
-                            collectTextures(d);
+                            CollectTextures(d);
                     }
+
                     if (f.Cloths?.data_items != null)
                     {
                         foreach (var c in f.Cloths.data_items)
-                            collectTextures(c.Drawable);
+                            CollectTextures(c.Drawable);
                     }
+
                     var children = f.PhysicsLODGroup?.PhysicsLOD1?.Children?.data_items;
                     if (children != null)
                     {
                         foreach (var child in children)
                         {
-                            collectTextures(child.Drawable1);
-                            collectTextures(child.Drawable2);
+                            CollectTextures(child.Drawable1);
+                            CollectTextures(child.Drawable2);
                         }
                     }
                 }
