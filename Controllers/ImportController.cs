@@ -1,13 +1,6 @@
-﻿using Microsoft.AspNetCore.Mvc;
-using Microsoft.Extensions.Logging;
-using System.IO;
-using System.Text;
-using System.Threading.Tasks;
+﻿using CodeWalker.API.Services;
 using CodeWalker.GameFiles;
-using System;
-using System.Collections.Generic;
-using Swashbuckle.AspNetCore.Annotations;
-using CodeWalker.API.Services;
+using Microsoft.AspNetCore.Mvc;
 
 [Route("api")]
 [ApiController]
@@ -16,6 +9,131 @@ public class ImportController : ControllerBase
     private readonly ILogger<ImportController> _logger;
     private readonly RpfService _rpfService;
     private readonly ConfigService _configService;
+
+    public ImportController(ILogger<ImportController> logger, RpfService rpfService, ConfigService configService)
+    {
+        _logger = logger;
+        _rpfService = rpfService;
+        _configService = configService;
+    }
+
+    public class ImportRequest
+    {
+        public List<string>? FilePaths { get; set; }
+        public bool? Xml { get; set; }
+        public string? RpfArchivePath { get; set; }
+        public string? OutputFolder { get; set; }
+    }
+
+    [HttpPost("import")]
+    [Consumes("application/json")]
+    public async Task<IActionResult> ImportJson([FromBody] ImportRequest json)
+    {
+        return await HandleImport(json.FilePaths, json.Xml, json.RpfArchivePath, json.OutputFolder);
+    }
+
+    [HttpPost("import")]
+    [Consumes("application/x-www-form-urlencoded")]
+    public async Task<IActionResult> ImportForm(
+        [FromForm] List<string>? filePaths,
+        [FromForm] bool? xml,
+        [FromForm] string? rpfArchivePath,
+        [FromForm] string? outputFolder)
+    {
+        return await HandleImport(filePaths, xml, rpfArchivePath, outputFolder);
+    }
+
+    private async Task<IActionResult> HandleImport(
+        List<string>? paths,
+        bool? xml,
+        string? rpfPath,
+        string? outputFolder)
+    {
+        var config = _configService.Get();
+        var isXml = xml ?? false;
+        rpfPath ??= config.RpfArchivePath;
+        outputFolder ??= config.FivemOutputDir;
+
+        if (paths == null || paths.Count == 0)
+            return BadRequest("No files provided.");
+        if (string.IsNullOrWhiteSpace(rpfPath))
+            return BadRequest("Missing RPF archive path.");
+        if (!_rpfService.TryResolveEntryPath(rpfPath, out var rpfFile, out var targetDir, out _, out var err))
+            return BadRequest($"Failed to resolve RPF path: {err}");
+        if (targetDir == null)
+            return BadRequest("Target directory inside RPF was null.");
+
+        var results = new List<object>();
+        foreach (var filePath in paths)
+        {
+            if (!System.IO.File.Exists(filePath))
+            {
+                results.Add(new { filePath, error = "File not found." });
+                continue;
+            }
+
+            try
+            {
+                byte[] data;
+                var fileName = Path.GetFileName(filePath);
+                var modelName = Path.GetFileNameWithoutExtension(filePath);
+
+                if (isXml)
+                {
+                    var xmlText = await System.IO.File.ReadAllTextAsync(filePath);
+                    var doc = new System.Xml.XmlDocument();
+                    doc.LoadXml(xmlText);
+                    var format = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
+                    if (!ValidMetaFormats.Contains(format))
+                    {
+                        results.Add(new { filePath, error = "Unsupported XML format." });
+                        continue;
+                    }
+                    modelName = modelName[..^trimLength];
+                    var texFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
+                    if (!Directory.Exists(texFolder)) texFolder = null;
+                    data = XmlMeta.GetData(doc, format, texFolder);
+                    if (data == null)
+                    {
+                        results.Add(new { filePath, error = "Failed to convert XML." });
+                        continue;
+                    }
+                }
+                else
+                {
+                    data = await System.IO.File.ReadAllBytesAsync(filePath);
+                }
+
+                var entry = RpfFile.CreateFile(targetDir, fileName, data);
+                string? outPath = null;
+
+                if (!string.IsNullOrWhiteSpace(outputFolder))
+                {
+                    var finalName = Path.ChangeExtension(modelName, Path.GetExtension(filePath));
+                    outPath = Path.Combine(outputFolder, finalName);
+                    var temp = Path.Combine(outputFolder, modelName + ".tmp");
+                    await System.IO.File.WriteAllBytesAsync(temp, data);
+                    if (System.IO.File.Exists(outPath)) System.IO.File.Delete(outPath);
+                    System.IO.File.Move(temp, outPath);
+                }
+
+                results.Add(new
+                {
+                    filePath,
+                    message = isXml ? "XML imported." : "Raw file imported.",
+                    filename = fileName,
+                    writtenTo = entry.Path,
+                    outputFilePath = outPath
+                });
+            }
+            catch (Exception ex)
+            {
+                results.Add(new { filePath, error = ex.Message });
+            }
+        }
+
+        return Ok(results);
+    }
 
     private static readonly HashSet<MetaFormat> ValidMetaFormats = new()
     {
@@ -27,137 +145,4 @@ public class ImportController : ControllerBase
         MetaFormat.CacheFile, MetaFormat.Heightmap, MetaFormat.Ypdb,
         MetaFormat.Yfd, MetaFormat.Mrf
     };
-
-    public ImportController(
-        ILogger<ImportController> logger,
-        RpfService rpfService,
-        ConfigService configService)
-    {
-        _logger = logger;
-        _rpfService = rpfService;
-        _configService = configService;
-    }
-
-    [HttpPost("import-xml")]
-    [SwaggerOperation(
-        Summary = "Imports XML files into an RPF archive",
-        Description = "Reads an XML file, processes it, and imports it into an RPF archive. Uses configured output and RPF path.")]
-    [SwaggerResponse(200, "File imported successfully into RPF", typeof(List<object>))]
-    [SwaggerResponse(400, "Bad request due to missing parameters")]
-    public async Task<IActionResult> ImportXml([
-        FromForm, SwaggerParameter("List of XML file paths to import", Required = true)
-    ] List<string> filePaths)
-    {
-        var config = _configService.Get();
-        string rpfArchivePath = config.RpfArchivePath;
-        string outputFolder = config.FivemOutputDir;
-
-        _logger.LogDebug("Received Import Request for {Count} files", filePaths?.Count ?? 0);
-
-        if (filePaths == null || filePaths.Count == 0)
-            return BadRequest("No files provided.");
-
-        if (string.IsNullOrWhiteSpace(rpfArchivePath) || !System.IO.File.Exists(rpfArchivePath))
-            return BadRequest("Configured RPF archive path is invalid or missing.");
-
-        var results = new List<object>();
-
-        foreach (var filePath in filePaths)
-        {
-            _logger.LogDebug("Processing file: {FilePath}", filePath);
-
-            if (!System.IO.File.Exists(filePath))
-            {
-                results.Add(new { filePath, error = "File not found." });
-                continue;
-            }
-
-            try
-            {
-                string xmlText = await System.IO.File.ReadAllTextAsync(filePath);
-                var doc = new System.Xml.XmlDocument();
-                doc.LoadXml(xmlText);
-
-                string fullFilename = Path.GetFileNameWithoutExtension(filePath);
-                var fileFormat = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
-
-                if (!ValidMetaFormats.Contains(fileFormat))
-                {
-                    results.Add(new { filePath, error = "Unsupported XML format." });
-                    continue;
-                }
-
-                string modelName = fullFilename.Substring(0, fullFilename.Length - trimLength);
-                string? textureFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
-
-                if (!Directory.Exists(textureFolder))
-                {
-                    _logger.LogWarning("Texture folder not found for {FilePath}. Proceeding without it.", filePath);
-                    textureFolder = null;
-                }
-
-                byte[] data = XmlMeta.GetData(doc, fileFormat, textureFolder);
-
-                if (data == null)
-                {
-                    results.Add(new { filePath, error = "Failed to process XML data." });
-                    continue;
-                }
-
-                var rpfFile = _rpfService.LoadRpf(rpfArchivePath);
-                var rootDir = rpfFile.Root;
-                RpfFile.CreateFile(rootDir, fullFilename, data);
-
-                string? outputFilePath = null;
-                if (!string.IsNullOrWhiteSpace(outputFolder))
-                {
-                    string ext = Path.GetExtension(fullFilename);
-                    string finalName = Path.ChangeExtension(modelName, ext);
-                    outputFilePath = Path.Combine(outputFolder, finalName);
-                    string tempFilePath = Path.Combine(outputFolder, modelName + ".tmp");
-
-                    try
-                    {
-                        System.IO.File.WriteAllBytes(tempFilePath, data);
-                        if (System.IO.File.Exists(outputFilePath))
-                            System.IO.File.Delete(outputFilePath);
-                        System.IO.File.Move(tempFilePath, outputFilePath);
-                    }
-                    catch (UnauthorizedAccessException ex)
-                    {
-                        results.Add(new { filePath, error = "Access Denied: " + ex.Message });
-                        continue;
-                    }
-                    catch (IOException ex)
-                    {
-                        results.Add(new { filePath, error = "I/O Error: " + ex.Message });
-                        continue;
-                    }
-                }
-
-                results.Add(new
-                {
-                    filePath,
-                    message = "File imported successfully into RPF.",
-                    filename = fullFilename,
-                    rpfArchivePath,
-                    outputFilePath
-                });
-            }
-            catch (System.Xml.XmlException ex)
-            {
-                results.Add(new { filePath, error = $"Invalid XML format: {ex.Message}" });
-            }
-            catch (FileNotFoundException ex)
-            {
-                results.Add(new { filePath, error = ex.Message });
-            }
-            catch (Exception ex)
-            {
-                results.Add(new { filePath, error = $"Error importing file: {ex.Message}" });
-            }
-        }
-
-        return Ok(results);
-    }
 }

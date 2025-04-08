@@ -6,6 +6,7 @@ using System.Text;
 using CodeWalker.GameFiles;
 using CodeWalker.API.Services; // ✅ Needed for ConfigService
 using Microsoft.Extensions.Logging;
+using CodeWalker.API.Utils;
 
 namespace CodeWalker.API.Controllers
 {
@@ -33,17 +34,17 @@ namespace CodeWalker.API.Controllers
 
         [HttpGet("download-files")]
         [SwaggerOperation(
-    Summary = "Downloads and extracts files",
-    Description = "Extracts textures or converts YDR files to XML before saving them."
-)]
+            Summary = "Downloads and extracts files",
+            Description = "Extracts textures or converts YDR files to XML before saving them."
+        )]
         [SwaggerResponse(200, "Successful operation", typeof(List<object>))]
         [SwaggerResponse(400, "Bad request")]
         public IActionResult DownloadFiles(
-    [FromQuery, SwaggerParameter("List of full RPF paths", Required = true)]
-    string[] fullPaths,
-    [FromQuery] bool xml = true,
-    [FromQuery] bool textures = true
-)
+            [FromQuery, SwaggerParameter("List of full RPF paths", Required = true)]
+            string[] fullPaths,
+            [FromQuery] bool xml = true,
+            [FromQuery] bool textures = true
+        )
         {
             if (fullPaths == null || fullPaths.Length == 0)
             {
@@ -64,8 +65,9 @@ namespace CodeWalker.API.Controllers
             Directory.CreateDirectory(codewalkerOutput);
             var results = new List<object>();
 
-            foreach (var fullRpfPath in fullPaths)
+            foreach (var originalPath in fullPaths)
             {
+                var fullRpfPath = PathUtils.NormalizePath(originalPath);
                 try
                 {
                     var extractedFile = _rpfService.ExtractFileWithEntry(fullRpfPath);
@@ -114,7 +116,7 @@ namespace CodeWalker.API.Controllers
                             string dest = Path.Combine(blenderOutput, filenameWithoutExt);
                             if (Directory.Exists(dest)) Directory.Delete(dest, true);
                             Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                            CopyDirectory(textureFolder, dest);
+                            DirUtils.CopyDirectory(textureFolder, dest);
                             results.Add(new { fullRpfPath, message = "Textures copied to Blender output.", copiedTo = dest });
                         }
                     }
@@ -134,16 +136,5 @@ namespace CodeWalker.API.Controllers
 
             return Ok(results);
         }
-
-        private void CopyDirectory(string sourceDir, string targetDir)
-        {
-            Directory.CreateDirectory(targetDir);
-            foreach (var file in Directory.GetFiles(sourceDir))
-                System.IO.File.Copy(file, Path.Combine(targetDir, Path.GetFileName(file)), true);
-
-            foreach (var dir in Directory.GetDirectories(sourceDir))
-                CopyDirectory(dir, Path.Combine(targetDir, Path.GetFileName(dir)));
-        }
-
     }
 }

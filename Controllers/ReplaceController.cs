@@ -4,7 +4,9 @@ using Microsoft.Extensions.Logging;
 using System.IO;
 using CodeWalker.GameFiles;
 using CodeWalker.API.Services;
+using CodeWalker.API.Utils;
 using System;
+using System.Linq;
 
 [ApiController]
 [Route("api")]
@@ -14,91 +16,74 @@ public class ReplaceController : ControllerBase
     private readonly ConfigService _configService;
     private readonly ILogger<ReplaceController> _logger;
 
-    private static string NormalizePath(string path)
-    {
-        return path.Replace('\\', '/').Trim();
-    }
-
-    public ReplaceController(
-        RpfService rpfService,
-        ConfigService configService,
-        ILogger<ReplaceController> logger)
+    public ReplaceController(RpfService rpfService, ConfigService configService, ILogger<ReplaceController> logger)
     {
         _rpfService = rpfService;
         _configService = configService;
         _logger = logger;
     }
 
+    public class ReplaceFileRequest
+    {
+        public string? RpfFilePath { get; set; }
+        public string? LocalFilePath { get; set; }
+    }
+
     [HttpPost("replace-file")]
-    [SwaggerOperation(
-        Summary = "Replaces a file inside a given RPF archive",
-        Description = "Loads the given RPF file from disk and replaces the matching internal file with a new local file. Automatically resolves relative RPF paths using the configured GTA directory.")]
-    [SwaggerResponse(200, "File replaced successfully")]
-    [SwaggerResponse(400, "Bad request")]
-    [SwaggerResponse(404, "File not found in RPF")]
-    public IActionResult ReplaceFile(
-        [FromQuery, SwaggerParameter("Path to the RPF archive (relative or absolute)", Required = true)]
-        string rpfFilePath,
-        [FromQuery, SwaggerParameter("Absolute local path to the replacement file", Required = true)]
-        string localFilePath)
+    [Consumes("application/json")]
+    [SwaggerOperation(Summary = "Replaces a file in an RPF (JSON)", Description = "Replaces the file inside an RPF using a JSON body.")]
+    public IActionResult ReplaceFileJson([FromBody] ReplaceFileRequest jsonBody)
+    {
+        return HandleReplacement(jsonBody?.RpfFilePath, jsonBody?.LocalFilePath);
+    }
+
+    [HttpPost("replace-file")]
+    [Consumes("application/x-www-form-urlencoded")]
+    [SwaggerOperation(Summary = "Replaces a file in an RPF (form/query)", Description = "Replaces the file inside an RPF using form or query parameters.")]
+    public IActionResult ReplaceFileForm(
+        [FromForm] string? rpfFilePath,
+        [FromForm] string? localFilePath)
+    {
+        return HandleReplacement(rpfFilePath, localFilePath);
+    }
+
+    private IActionResult HandleReplacement(string? rpfFilePath, string? localFilePath)
     {
         if (string.IsNullOrWhiteSpace(localFilePath) || !System.IO.File.Exists(localFilePath))
             return BadRequest("Invalid or missing localFilePath.");
 
-        if (!Path.IsPathRooted(rpfFilePath))
+        var fileName = Path.GetFileName(localFilePath);
+        if (string.IsNullOrWhiteSpace(fileName))
+            return BadRequest("Could not determine filename from localFilePath.");
+
+        if (string.IsNullOrWhiteSpace(rpfFilePath))
+            return BadRequest("Missing rpfFilePath.");
+
+        if (!_rpfService.TryResolveEntryPath(rpfFilePath, out var rpfFile, out var targetDir, out var _, out var resolveError))
         {
-            string basePath = _configService.Get().GTAPath;
-            rpfFilePath = Path.Combine(basePath, rpfFilePath);
-            _logger.LogDebug("[DEBUG] Resolved RPF path to: {ResolvedPath}", rpfFilePath);
+            _logger.LogError("Failed to resolve RPF path: {Error}", resolveError);
+            return BadRequest("Failed to resolve RPF path: " + resolveError);
         }
 
-        if (!System.IO.File.Exists(rpfFilePath))
-            return BadRequest("RPF archive does not exist at given path.");
+        if (targetDir == null)
+            return BadRequest("Resolved directory was null. Can't replace file.");
 
         try
         {
-            byte[] fileData = System.IO.File.ReadAllBytes(localFilePath);
-            var rpfFile = _rpfService.LoadRpf(rpfFilePath);
-            var rootDir = rpfFile.Root;
+            var existing = targetDir.Files.FirstOrDefault(f => f.NameLower == fileName.ToLowerInvariant());
+            if (existing == null)
+                return NotFound($"File '{fileName}' not found in RPF.");
 
-            string rpfFileName = Path.GetFileName(rpfFilePath);
-            string targetFileName = Path.GetFileName(localFilePath);
-            string fullRpfPath = $"{rpfFileName}/{targetFileName}";
+            byte[] data = System.IO.File.ReadAllBytes(localFilePath);
+            RpfFile.CreateFile(targetDir, fileName, data);
 
-            _logger.LogDebug("[DEBUG] Searching for entry with path: {ExpectedPath}", fullRpfPath);
-            _logger.LogDebug("=== Listing all entries in RPF ===");
-            foreach (var entry in rpfFile.AllEntries)
+            return Ok(new
             {
-                if (entry is RpfFileEntry fe)
-                    _logger.LogDebug(" - {Path}", fe.Path);
-            }
-            _logger.LogDebug("=== End of RPF entries ===");
-
-            foreach (var entry in rpfFile.AllEntries)
-            {
-                if (entry is RpfFileEntry fileEntry)
-                {
-                    _logger.LogDebug("[DEBUG] Checking RPF entry: {EntryPath}", fileEntry.Path);
-
-                    if (NormalizePath(fileEntry.Path) == NormalizePath(fullRpfPath))
-                    {
-                        _logger.LogInformation("[MATCH] Replacing {Path} inside RPF", fileEntry.Path);
-                        RpfFile.CreateFile(rootDir, Path.GetFileName(fullRpfPath), fileData);
-
-                        return Ok(new
-                        {
-                            rpfFilePath,
-                            fullRpfPath,
-                            replacedWith = localFilePath,
-                            message = "File replaced successfully.",
-                            newSize = fileData.Length
-                        });
-                    }
-                }
-            }
-
-            _logger.LogWarning("[MISS] No matching entry found for {FullRpfPath}", fullRpfPath);
-            return NotFound($"File '{fullRpfPath}' not found in RPF.");
+                rpfFilePath,
+                replacedWith = localFilePath,
+                message = "File replaced successfully.",
+                newSize = data.Length
+            });
         }
         catch (Exception ex)
         {

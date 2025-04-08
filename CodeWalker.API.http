@@ -5,41 +5,97 @@
 GET {{CodeWalkerAPI_HostAddress}}/api/download-files?filenames=ap1_02_planes003.ydr&filenames=prop_alien_egg_01.ydr&textures=true&xml=true&outputFolderPath=C:\GTA_FILES
 Accept: application/json
 
+### ✅ Debugging endpoint
+GET http://localhost:5555/api/debug/list-files?rpfPath=C:%5CProgram%20Files%5CRockstar%20Games%5CGrand%20Theft%20Auto%20V%5Cmodstore%5Cnew.rpf%5Csome%5Csome.rpf%5Csome
+Accept: application/json
+
 ### ✅ With XML Conversion (Downloads files and converts to XML)
 # This request downloads the specified YDR files and converts them to XML before saving.
-GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\levels\gta5\props\lev_des.rpf\prop_alien_egg_01.ydr&fullPaths=modstore\new.rpf\prop_alien_egg_01.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out
+GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\levels\gta5\props\lev_des\lev_des.rpf\prop_alien_egg_01.ydr&fullPaths=modstore\new.rpf\prop_alien_egg_01.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out
 Accept: application/json
 
 ### ✅ Without XML Conversion (Downloads files as they are)
 # This request downloads the specified YDR files without converting them to XML.
-GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\levels\gta5\props\lev_des.rpf\prop_alien_egg_01.ydr&fullPaths=modstore\new.rpf\prop_alien_egg_01.ydr&xml=false&outputFolderPath=C:\GTA_YDR_FILES\out
+GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\levels\gta5\props\lev_des\lev_des.rpf\prop_alien_egg_01.ydr&fullPaths=modstore\new.rpf\prop_alien_egg_01.ydr&xml=false&outputFolderPath=C:\GTA_FILES\fivem_out
 Accept: application/json
 
-### ✅ With outputFolder (Writes to Disk + Imports to RPF)
-# This request imports the XML files into the RPF archive AND saves them to the specified output folder.
-POST {{CodeWalkerAPI_HostAddress}}/api/import-xml
+### ✅ Form Import with outputFolder, with xml conversion
+POST {{CodeWalkerAPI_HostAddress}}/api/import
 Content-Type: application/x-www-form-urlencoded
 
-filePaths=C:\GTA_FILES\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_FILES\ap1_02_planes003.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf&outputFolder=C:\GTA_FILES\out
+xml=true&filePaths=C:\GTA_FILES\cw_out\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_FILES\cw_out\ap1_02_planes003.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf\some&outputFolder=C:\GTA_FILES\fivem_out
 
-### ✅ Without outputFolder (Only Imports to RPF, No File Saving)  
-# This request imports the XML files into the RPF archive but does NOT save them to disk.  
-POST {{CodeWalkerAPI_HostAddress}}/api/import-xml  
-Content-Type: application/x-www-form-urlencoded  
+### ✅ JSON Import with outputFolder, with XML conversion
+POST {{CodeWalkerAPI_HostAddress}}/api/import
+Content-Type: application/json
 
-filePaths=C:\GTA_FILES\prop_alien_egg_01.ydr.xml&filePaths=C:\GTA_FILES\ap1_02_planes003.ydr.xml&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf  
+{
+  "xml": true,
+  "filePaths": [
+    "C:\\GTA_FILES\\cw_out\\prop_alien_egg_01.ydr.xml",
+    "C:\\GTA_FILES\\cw_out\\ap1_02_planes003.ydr.xml"
+  ],
+  "rpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf\\some",
+  "outputFolder": "C:\\GTA_FILES\\fivem_out"
+}
+
+### ✅ Form Import with outputFolder, no xml conversion
+POST {{CodeWalkerAPI_HostAddress}}/api/import
+Content-Type: application/x-www-form-urlencoded
+
+xml=false&filePaths=C:\GTA_FILES\fivem_out\prop_alien_egg_01.ydr&filePaths=C:\GTA_FILES\fivem_out\cs4_02_airplanes.ydr&rpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf&outputFolder=C:\GTA_FILES\fivem_out
+
+### ✅ JSON Import with outputFolder, no xml conversion
+POST {{CodeWalkerAPI_HostAddress}}/api/import
+Content-Type: application/json
+
+{
+  "xml": false,
+  "filePaths": [
+    "C:\\GTA_FILES\\fivem_out\\prop_alien_egg_01.ydr",
+    "C:\\GTA_FILES\\fivem_out\\cs4_02_airplanes.ydr"
+  ],
+  "rpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf",
+  "outputFolder": "C:\\GTA_FILES\\fivem_out"
+}
+
 
 ### ✅ Search for Files in RPF Archives
 # This request searches for files in the RPF archive that match the given query.
 GET {{CodeWalkerAPI_HostAddress}}/api/search-file?filename=prop_alien_egg_01
 Accept: application/json
 
-### ✅ Replace File in RPF (Relative Path)
-# Replaces 'prop_alien_egg_01_edit.ydr' inside 'modstore/new.rpf'
-# The archive path is resolved using the configured GTAPath.
-POST {{CodeWalkerAPI_HostAddress}}/api/replace-file?rpfFilePath=modstore/new.rpf&localFilePath=C:\GTA_FILES\fivem_out\prop_alien_egg_01_edit.ydr
+### ✅ Form replace File in subfolder of RPF 
+POST {{CodeWalkerAPI_HostAddress}}/api/replace-file
+Content-Type: application/x-www-form-urlencoded
+
+rpfFilePath=modstore/new.rpf/some/some.rpf/some&localFilePath=C:\GTA_FILES\fivem_out\prop_alien_egg_01.ydr
+
+### ✅ JSON replace File in subfolder of RPF 
+POST {{CodeWalkerAPI_HostAddress}}/api/replace-file
+Content-Type: application/json
+
+{
+  "rpfFilePath": "modstore/new.rpf/some/some.rpf/some",
+  "localFilePath": "C:\\GTA_FILES\\fivem_out\\prop_alien_egg_01.ydr"
+}
+
+### ✅ Form Set Config
+POST {{CodeWalkerAPI_HostAddress}}/api/set-config
+Content-Type: application/x-www-form-urlencoded
+
+CodewalkerOutputDir=C:\GTA_FILES\cw_out&BlenderOutputDir=C:\GTA_FILES\blender_out&FivemOutputDir=C:\FXServer\txData\QboxProject_C81BA2.base\resources\[standalone]\test_map\stream\&RpfArchivePath=C:\Program Files\Rockstar Games\Grand Theft Auto V\modstore\new.rpf&GTAPath=C:\Program Files\Rockstar Games\Grand Theft Auto V&Port=5555
 
 
-### ✅ Replace File in RPF (Absolute Path)
-# Replaces 'prop_alien_egg_01_edit.ydr' in an explicitly defined archive path.
-POST {{CodeWalkerAPI_HostAddress}}/api/replace-file?rpfFilePath=C:\\Program%20Files\\Rockstar%20Games\\Grand%20Theft%20Auto%20V\\modstore\\new.rpf&localFilePath=C:\\GTA_FILES\\fivem_out\\prop_alien_egg_01_edit.ydr
+### ✅ JSON Set Config
+POST {{CodeWalkerAPI_HostAddress}}/api/set-config
+Content-Type: application/json
+
+{
+  "CodewalkerOutputDir": "C:\\GTA_FILES\\cw_out",
+  "BlenderOutputDir": "C:\\GTA_FILES\\blender_out",
+  "FivemOutputDir": "C:\\GTA_FILES\\fivem_out",
+  "RpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf",
+  "GTAPath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
+  "Port": 5555
+}

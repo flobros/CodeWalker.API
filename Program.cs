@@ -93,8 +93,10 @@ builder.Services.AddSingleton<ConfigService>();
 builder.Services.AddSingleton<RpfService>(serviceProvider =>
 {
     var logger = serviceProvider.GetRequiredService<ILogger<RpfService>>();
-    return new RpfService(gtaPath, logger);
+    var configService = serviceProvider.GetRequiredService<ConfigService>();
+    return new RpfService(logger, configService);
 });
+
 
 // ✅ Build the app
 var app = builder.Build();

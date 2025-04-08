@@ -1,6 +1,9 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using CodeWalker.API.Services;
+using CodeWalker.API.Utils;
 using CodeWalker.GameFiles;
 using Microsoft.Extensions.Logging;
 
@@ -8,12 +11,21 @@ public class RpfService
 {
     private readonly RpfManager _rpfManager;
     private readonly ILogger<RpfService> _logger;
+    private readonly ConfigService _configService;
 
-    public RpfService(string gtaPath, ILogger<RpfService> logger)
+    public RpfService(ILogger<RpfService> logger, ConfigService configService)
     {
+        _logger = logger;
+        _configService = configService;
+        string gtaPath = _configService.Get().GTAPath;
+
         _rpfManager = new RpfManager();
         _rpfManager.Init(gtaPath, false, Console.WriteLine, Console.Error.WriteLine);
-        _logger = logger;
+    }
+
+    private static string NormalizePath(string path)
+    {
+        return path.Replace('\\', '/').Trim();
     }
 
     public List<string> SearchFile(string filename)
@@ -31,83 +43,138 @@ public class RpfService
 
     public byte[] ExtractFile(string filename)
     {
-        foreach (var entry in _rpfManager.EntryDict.Values)
+        var entry = _rpfManager.GetEntry(filename);
+        if (entry is RpfFileEntry fileEntry)
         {
-            if (entry.Name.Equals(filename, StringComparison.OrdinalIgnoreCase))
-            {
-                if (entry is RpfFileEntry fileEntry)
-                {
-                    _logger.LogDebug("Extracting {FilePath}...", fileEntry.Path);
-                    return fileEntry.File.ExtractFile(fileEntry);
-                }
-            }
+            _logger.LogDebug("Extracting {FilePath}...", fileEntry.Path);
+            return fileEntry.File.ExtractFile(fileEntry);
         }
         throw new FileNotFoundException($"File '{filename}' not found.");
     }
 
     public (byte[] fileBytes, RpfFileEntry entry)? ExtractFileWithEntry(string fullRpfPath)
     {
-        foreach (var entry in _rpfManager.EntryDict.Values)
+        var entry = _rpfManager.GetEntry(fullRpfPath);
+        if (entry is RpfFileEntry fileEntry)
         {
-            if (entry is RpfFileEntry fileEntry)
-            {
-                _logger.LogDebug("[DEBUG] {FilePath}", fileEntry.Path);
-                if (fileEntry.Path.Equals(fullRpfPath, StringComparison.OrdinalIgnoreCase))
-                {
-                    _logger.LogDebug("[MATCH] Found: {FilePath}", fileEntry.Path);
-                    return (fileEntry.File.ExtractFile(fileEntry), fileEntry);
-                }
-            }
+            _logger.LogDebug("[MATCH] Found: {FilePath}", fileEntry.Path);
+            return (fileEntry.File.ExtractFile(fileEntry), fileEntry);
         }
         _logger.LogWarning("[DEBUG] File not found in RPF: {FullPath}", fullRpfPath);
         return null;
     }
 
-    public RpfFile LoadRpf(string rpfPath)
+    public RpfEntry? GetEntry(string path)
     {
-        _logger.LogDebug("[DEBUG] Attempting to open RPF file directly: {RpfPath}", rpfPath);
-
-        if (!File.Exists(rpfPath))
-        {
-            _logger.LogError("[ERROR] RPF archive not found: {RpfPath}", rpfPath);
-            throw new FileNotFoundException($"RPF archive not found: {rpfPath}");
-        }
-
-        RpfFile rpfFile = new RpfFile(rpfPath, Path.GetFileName(rpfPath));
-        rpfFile.ScanStructure(msg => _logger.LogDebug(msg), err => _logger.LogError(err));
-
-        if (rpfFile == null || rpfFile.AllEntries == null)
-        {
-            _logger.LogError("[ERROR] Failed to scan RPF structure: {RpfPath}", rpfPath);
-            throw new Exception($"Failed to load RPF: {rpfPath}");
-        }
-
-        _logger.LogDebug("[DEBUG] Successfully loaded and scanned RPF: {RpfPath}", rpfPath);
-        return rpfFile;
+        return _rpfManager.GetEntry(path);
     }
 
-    public RpfDirectoryEntry FindDirectoryInRpf(RpfFile rpfFile, string folderPath)
+    public RpfFile? GetParentRpfFile(RpfEntry entry)
     {
-        RpfDirectoryEntry? currentDir = rpfFile.Root;
-        foreach (var part in folderPath.Split(Path.DirectorySeparatorChar))
+        return entry?.File;
+    }
+
+    public RpfDirectoryEntry EnsureDirectoryPath(RpfDirectoryEntry root, string internalPath)
+    {
+        var parts = internalPath.Split(new[] { '/', '\\' }, StringSplitOptions.RemoveEmptyEntries);
+        RpfDirectoryEntry current = root;
+        foreach (var part in parts)
         {
-            currentDir = currentDir?.Directories.Find(d => d.Name.Equals(part, StringComparison.OrdinalIgnoreCase));
-            if (currentDir == null)
+            var existing = current.Directories.FirstOrDefault(d => d.Name.Equals(part, StringComparison.OrdinalIgnoreCase));
+            if (existing != null)
             {
-                throw new Exception($"Directory not found inside RPF: {folderPath}");
+                current = existing;
+                continue;
             }
+            _logger.LogInformation("[CREATE] Creating directory '{Dir}' in '{Parent}'", part, current.Path);
+            var newDir = RpfFile.CreateDirectory(current, part);
+            current = newDir;
         }
-        return currentDir!;
+        return current;
     }
+
+    private string ToVirtualPath(string fullPath)
+    {
+        var gtaPath = PathUtils.NormalizePath(_configService.Get().GTAPath); // `/`
+        var normalized = PathUtils.NormalizePath(fullPath); // `/`
+
+        if (normalized.StartsWith(gtaPath, StringComparison.OrdinalIgnoreCase))
+            normalized = normalized.Substring(gtaPath.Length).TrimStart('/');
+
+        return PathUtils.NormalizePath(normalized, useBackslashes: true); // final lookup version
+    }
+
+
+    public bool TryResolveEntryPath(string fullPath, out RpfFile? rpfFile, out RpfDirectoryEntry? targetDir, out string? fileName, out string? error)
+    {
+        rpfFile = null;
+        targetDir = null;
+        fileName = null;
+        error = null;
+
+        try
+        {
+            var normalized = NormalizePath(fullPath);
+            _logger.LogDebug("[TryResolve] Normalized path: {Path}", normalized);
+
+            var virtualPath = ToVirtualPath(fullPath); // now backslash-correct
+
+            // Case 1: It’s a folder
+            var entry = _rpfManager.GetEntry(virtualPath);
+            if (entry is RpfDirectoryEntry dirEntry)
+            {
+                rpfFile = dirEntry.File;
+                targetDir = dirEntry;
+                return true;
+            }
+
+            // Case 2: It’s an RPF file
+            if (virtualPath.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
+            {
+                _logger.LogDebug("[TryResolve] Trying FindRpfFile({Path})", virtualPath);
+                var archive = _rpfManager.FindRpfFile(virtualPath);
+                if (archive != null)
+                {
+                    rpfFile = archive;
+                    targetDir = rpfFile?.Root;
+                    return true;
+                }
+            }
+
+            error = $"Entry not found or not a valid target: {entry?.GetType().Name ?? "null"}";
+            _logger.LogWarning("[TryResolve] {Error}", error);
+            return false;
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            _logger.LogError(ex, "[TryResolve] Unexpected error");
+            return false;
+        }
+    }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     public int Preheat()
     {
-        int count = 0;
-        foreach (var entry in _rpfManager.EntryDict.Values)
-        {
-            string path = entry.Path;
-            count++;
-        }
-        return count;
+        return _rpfManager.EntryDict.Count;
     }
+
+    public RpfManager Manager => _rpfManager;
+
 }
