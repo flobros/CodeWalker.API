@@ -72,6 +72,7 @@ public class ImportController : ControllerBase
             return BadRequest("Target directory inside RPF was null.");
 
         var results = new List<object>();
+
         foreach (var filePath in paths)
         {
             if (!System.IO.File.Exists(filePath))
@@ -83,23 +84,30 @@ public class ImportController : ControllerBase
             try
             {
                 byte[] data;
-                var fileName = Path.GetFileName(filePath);
-                var modelName = Path.GetFileNameWithoutExtension(filePath);
+                string modelName;
+                string finalName;
 
                 if (isXml)
                 {
                     var xmlText = await System.IO.File.ReadAllTextAsync(filePath);
                     var doc = new System.Xml.XmlDocument();
                     doc.LoadXml(xmlText);
+
                     var format = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
-                    if (!ValidMetaFormats.Contains(format))
+                    if (format == MetaFormat.XML)
                     {
-                        results.Add(new { filePath, error = "Unsupported XML format." });
+                        results.Add(new { filePath, error = "Unknown or unhandled XML format." });
                         continue;
                     }
-                    modelName = modelName[..^trimLength];
+
+                    var fullFilename = Path.GetFileNameWithoutExtension(filePath); // e.g. "prop_something.ytyp"
+                    modelName = fullFilename[..^trimLength];                       // e.g. "prop_something"
+                    var ext = Path.GetExtension(fullFilename);                     // e.g. ".ytyp"
+                    finalName = Path.ChangeExtension(modelName, ext);              // e.g. "prop_something.ytyp"
+
                     var texFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
                     if (!Directory.Exists(texFolder)) texFolder = null;
+
                     data = XmlMeta.GetData(doc, format, texFolder);
                     if (data == null)
                     {
@@ -110,16 +118,18 @@ public class ImportController : ControllerBase
                 else
                 {
                     data = await System.IO.File.ReadAllBytesAsync(filePath);
+                    finalName = Path.GetFileName(filePath);
+                    modelName = Path.GetFileNameWithoutExtension(filePath);
                 }
 
-                var entry = RpfFile.CreateFile(targetDir, fileName, data);
-                string? outPath = null;
+                var entry = RpfFile.CreateFile(targetDir, finalName, data);
 
+                string? outPath = null;
                 if (!string.IsNullOrWhiteSpace(outputFolder))
                 {
-                    var finalName = Path.ChangeExtension(modelName, Path.GetExtension(filePath));
                     outPath = Path.Combine(outputFolder, finalName);
                     var temp = Path.Combine(outputFolder, modelName + ".tmp");
+
                     await System.IO.File.WriteAllBytesAsync(temp, data);
                     if (System.IO.File.Exists(outPath)) System.IO.File.Delete(outPath);
                     System.IO.File.Move(temp, outPath);
@@ -129,7 +139,7 @@ public class ImportController : ControllerBase
                 {
                     filePath,
                     message = isXml ? "XML imported." : "Raw file imported.",
-                    filename = fileName,
+                    filename = finalName,
                     writtenTo = entry.Path,
                     outputFilePath = outPath
                 });
@@ -142,15 +152,4 @@ public class ImportController : ControllerBase
 
         return Ok(results);
     }
-
-    private static readonly HashSet<MetaFormat> ValidMetaFormats = new()
-    {
-        MetaFormat.RSC, MetaFormat.XML, MetaFormat.PSO, MetaFormat.RBF,
-        MetaFormat.AudioRel, MetaFormat.Ynd, MetaFormat.Ynv, MetaFormat.Ycd,
-        MetaFormat.Ybn, MetaFormat.Ytd, MetaFormat.Ydr, MetaFormat.Ydd,
-        MetaFormat.Yft, MetaFormat.Ypt, MetaFormat.Yld, MetaFormat.Yed,
-        MetaFormat.Ywr, MetaFormat.Yvr, MetaFormat.Awc, MetaFormat.Fxc,
-        MetaFormat.CacheFile, MetaFormat.Heightmap, MetaFormat.Ypdb,
-        MetaFormat.Yfd, MetaFormat.Mrf
-    };
 }
