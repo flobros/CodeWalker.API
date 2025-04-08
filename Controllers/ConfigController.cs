@@ -26,7 +26,7 @@ namespace CodeWalker.API.Controllers
 
         [HttpPost("set-config")]
         [Consumes("application/x-www-form-urlencoded")]
-        [SwaggerOperation(Summary = "Set config paths (Form)", Description = "Updates folder paths using form fields.")]
+        [ApiExplorerSettings(IgnoreApi = true)]
         public IActionResult SetConfigForm(
             [FromForm] string? CodewalkerOutputDir,
             [FromForm] string? BlenderOutputDir,

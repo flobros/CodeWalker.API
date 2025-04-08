@@ -39,7 +39,7 @@ public class ReplaceController : ControllerBase
 
     [HttpPost("replace-file")]
     [Consumes("application/x-www-form-urlencoded")]
-    [SwaggerOperation(Summary = "Replaces a file in an RPF (form/query)", Description = "Replaces the file inside an RPF using form or query parameters.")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public IActionResult ReplaceFileForm(
         [FromForm] string? rpfFilePath,
         [FromForm] string? localFilePath)

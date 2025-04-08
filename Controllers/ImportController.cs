@@ -1,6 +1,7 @@
 ﻿using CodeWalker.API.Services;
 using CodeWalker.GameFiles;
 using Microsoft.AspNetCore.Mvc;
+using Swashbuckle.AspNetCore.Annotations;
 
 [Route("api")]
 [ApiController]
@@ -27,6 +28,12 @@ public class ImportController : ControllerBase
 
     [HttpPost("import")]
     [Consumes("application/json")]
+    [SwaggerOperation(
+        Summary = "Import files into RPF archive",
+        Description = "Imports one or more raw or XML files into a specified RPF archive path. Converts XML to binary if requested."
+    )]
+    [SwaggerResponse(200, "Import result", typeof(List<object>))]
+    [SwaggerResponse(400, "Bad request (e.g. missing file paths or RPF path)")]
     public async Task<IActionResult> ImportJson([FromBody] ImportRequest json)
     {
         return await HandleImport(json.FilePaths, json.Xml, json.RpfArchivePath, json.OutputFolder);
@@ -34,6 +41,7 @@ public class ImportController : ControllerBase
 
     [HttpPost("import")]
     [Consumes("application/x-www-form-urlencoded")]
+    [ApiExplorerSettings(IgnoreApi = true)]
     public async Task<IActionResult> ImportForm(
         [FromForm] List<string>? filePaths,
         [FromForm] bool? xml,
