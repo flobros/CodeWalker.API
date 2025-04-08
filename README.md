@@ -16,7 +16,7 @@ The API now reads its configuration from a `Config/userconfig.json` file located
 {
   "CodewalkerOutputDir": "C:\\GTA_FILES\\cw_out",
   "BlenderOutputDir": "C:\\GTA_FILES\\blender_out",
-  "FivemOutputDir": ""C:\\GTA_FILES\\fivem_out",
+  "FivemOutputDir": "C:\\GTA_FILES\\fivem_out",
   "RpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf",
   "GTAPath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
   "Port": 5555

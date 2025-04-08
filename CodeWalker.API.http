@@ -1,14 +1,5 @@
 ﻿@CodeWalkerAPI_HostAddress = http://localhost:5555
 
-### ✅ Extract Textures (Downloads textures from models)
-# This request extracts textures from the specified YDR files and saves them to disk.
-GET {{CodeWalkerAPI_HostAddress}}/api/download-files?filenames=ap1_02_planes003.ydr&filenames=prop_alien_egg_01.ydr&textures=true&xml=true&outputFolderPath=C:\GTA_FILES
-Accept: application/json
-
-### ✅ Debugging endpoint
-GET http://localhost:5555/api/debug/list-files?rpfPath=C:%5CProgram%20Files%5CRockstar%20Games%5CGrand%20Theft%20Auto%20V%5Cmodstore%5Cnew.rpf%5Csome%5Csome.rpf%5Csome
-Accept: application/json
-
 ### ✅ With XML Conversion (Downloads files and converts to XML)
 # This request downloads the specified YDR files and converts them to XML before saving.
 GET {{CodeWalkerAPI_HostAddress}}/api/download-files?fullPaths=x64c.rpf\levels\gta5\props\lev_des\lev_des.rpf\prop_alien_egg_01.ydr&fullPaths=modstore\new.rpf\prop_alien_egg_01.ydr&xml=true&outputFolderPath=C:\GTA_YDR_FILES\out
