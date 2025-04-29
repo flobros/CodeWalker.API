@@ -18,8 +18,7 @@ builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnCh
 
 // ✅ Bind ApiConfig from configuration
 builder.Services.Configure<ApiConfig>(builder.Configuration);
-builder.Services.AddSingleton(serviceProvider =>
-{
+builder.Services.AddSingleton(serviceProvider => {
     return serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiConfig>>().Value;
 });
 
