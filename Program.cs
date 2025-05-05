@@ -13,25 +13,71 @@ using CodeWalker.API.Models;
 // ✅ Create the builder
 var builder = WebApplication.CreateBuilder(args);
 
-// ✅ Load configuration
-builder.Configuration.AddJsonFile("appsettings.json", optional: true, reloadOnChange: true);
+// ✅ (No need to load appsettings.json manually!)
 
-// ✅ Bind ApiConfig from configuration
-builder.Services.Configure<ApiConfig>(builder.Configuration);
-builder.Services.AddSingleton(serviceProvider => {
-    return serviceProvider.GetRequiredService<Microsoft.Extensions.Options.IOptions<ApiConfig>>().Value;
-});
-
-// ✅ Load config directly from disk (overrides appsettings if saved)
-var configService = new ConfigService();
-var config = configService.Get();
-string gtaPath = config.GTAPath;
-int port = config.Port;
+// ✅ Register ConfigService
+builder.Services.AddSingleton<ConfigService>();
 
 // ✅ Logging setup
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
+
+// ✅ Register services
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "CodeWalker API", Version = "v1" });
+    c.EnableAnnotations();
+});
+builder.Services.AddControllers();
+
+// ✅ Register GameFileCache
+builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
+{
+    var configService = serviceProvider.GetRequiredService<ConfigService>();
+    var config = configService.Get();
+    string gtaPath = config.GTAPath;
+
+    long cacheSize = 2L * 1024 * 1024 * 1024; // 2GB Cache
+    double cacheTime = 60.0;
+    bool isGen9 = false;
+    string dlc = "";
+    bool enableMods = false;
+    string excludeFolders = "";
+
+    var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaPath, isGen9, dlc, enableMods, excludeFolders);
+    gameFileCache.EnableDlc = true; // this ensures Init() runs InitDlc()
+    gameFileCache.Init(
+        message => Console.WriteLine($"[GameFileCache] {message}"),
+        error => Console.Error.WriteLine($"[GameFileCache ERROR] {error}")
+    );
+    Console.WriteLine("[Startup] Archetypes loaded: " + gameFileCache.YtypDict?.Count);
+    return gameFileCache;
+});
+
+// ✅ Register RpfService with logging support
+builder.Services.AddSingleton<RpfService>(serviceProvider =>
+{
+    var logger = serviceProvider.GetRequiredService<ILogger<RpfService>>();
+    var configService = serviceProvider.GetRequiredService<ConfigService>();
+    return new RpfService(logger, configService);
+});
+
+// ✅ Build the app
+var app = builder.Build();
+
+// ✅ Get config after app built
+var configService = app.Services.GetRequiredService<ConfigService>();
+var config = configService.Get();
+string gtaPath = config.GTAPath;
+int port = config.Port;
+
+if (port == 0)
+{
+    Console.WriteLine("[WARN] Port is set to 0. Using default port 5555...");
+    port = 5555;
+}
 
 // ✅ Ensure GTA V directory exists
 if (!Directory.Exists(gtaPath))
@@ -53,53 +99,6 @@ catch (Exception ex)
     return;
 }
 
-// ✅ Register services
-builder.Services.AddEndpointsApiExplorer();
-builder.Services.AddSwaggerGen(c =>
-{
-    c.SwaggerDoc("v1", new OpenApiInfo { Title = "CodeWalker API", Version = "v1" });
-    c.EnableAnnotations();
-});
-builder.Services.AddControllers();
-
-// ✅ Register GameFileCache
-builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
-{
-    long cacheSize = 2L * 1024 * 1024 * 1024; // 2GB Cache
-    double cacheTime = 60.0;
-    bool isGen9 = false;
-    string dlc = "";
-    bool enableMods = false;
-    string excludeFolders = "";
-
-    var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaPath, isGen9, dlc, enableMods, excludeFolders);
-
-    gameFileCache.EnableDlc = true; // this ensures Init() runs InitDlc()
-
-    gameFileCache.Init(
-        message => Console.WriteLine($"[GameFileCache] {message}"),
-        error => Console.Error.WriteLine($"[GameFileCache ERROR] {error}")
-    );
-
-    Console.WriteLine("[Startup] Archetypes loaded: " + gameFileCache.YtypDict?.Count);
-
-    return gameFileCache;
-});
-
-builder.Services.AddSingleton<ConfigService>();
-
-// ✅ Register RpfService with logging support
-builder.Services.AddSingleton<RpfService>(serviceProvider =>
-{
-    var logger = serviceProvider.GetRequiredService<ILogger<RpfService>>();
-    var configService = serviceProvider.GetRequiredService<ConfigService>();
-    return new RpfService(logger, configService);
-});
-
-
-// ✅ Build the app
-var app = builder.Build();
-
 // ✅ Bind the server to the configured port
 app.Urls.Add($"http://0.0.0.0:{port}");
 
@@ -114,7 +113,6 @@ app.UseSwaggerUI(c =>
     c.SwaggerEndpoint("/swagger/v1/swagger.json", "CodeWalker API v1");
     c.RoutePrefix = ""; // Swagger available at root
 });
-
 app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
@@ -122,12 +120,10 @@ app.MapControllers();
 // ✅ (Cache) preheating
 var rpfService = app.Services.GetRequiredService<RpfService>();
 int count = rpfService.Preheat();
-
 try
 {
     var gameFileCache = app.Services.GetRequiredService<GameFileCache>();
     Console.WriteLine("[Startup] Preloading cache with known meta types...");
-
     // Preload by hash
     uint hash = JenkHash.GenHash("prop_alien_egg_01");
     var ydr = gameFileCache.GetYdr(hash);

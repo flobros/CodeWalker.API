@@ -90,3 +90,12 @@ Content-Type: application/json
   "GTAPath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
   "Port": 5555
 }
+
+### ✅ Jenkins Hash Generation (UTF8 default)
+GET {{CodeWalkerAPI_HostAddress}}/api/hash/jenkins?input=prop_alien_egg_01
+Accept: application/json
+
+### ✅ Jenkins Hash Generation (ASCII encoding)
+GET {{CodeWalkerAPI_HostAddress}}/api/hash/jenkins?input=prop_alien_egg_01&encoding=1
+Accept: application/json
+
