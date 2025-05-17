@@ -1,5 +1,4 @@
 ﻿name: Build and Release CodeWalker API
-
 on:
   push:
     tags:
@@ -33,6 +32,13 @@ jobs:
             Write-Host "✅ CodeWalker.Core is present."
           }
 
+      - name: 🔧 Patch CodeWalker.Core to fix Assembly.GetExecutingAssembly().Location
+        shell: pwsh
+        run: |
+          $file = "${{ github.workspace }}/CodeWalker.Core/GameFiles/RpfManager.cs"
+          (Get-Content $file) -replace 'var path = System\.Reflection\.Assembly\.GetExecutingAssembly\(\)\.Location;', 'var path = AppContext.BaseDirectory;' | Set-Content $file
+          Write-Host "✅ Patched RpfManager.cs to use AppContext.BaseDirectory"
+
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v1
 
@@ -45,7 +51,6 @@ jobs:
         run: |
           cd "${{ github.workspace }}/CodeWalker.API"
           dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
-
 
       - name: Package published output as ZIP
         shell: cmd
@@ -61,8 +66,6 @@ jobs:
             ) else (
                 echo "✅ ZIP file created successfully."
             )
-
-
 
       - name: Debug - List Workspace Contents
         shell: cmd
