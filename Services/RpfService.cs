@@ -153,23 +153,6 @@ public class RpfService
         }
     }
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
     public int Preheat()
     {
         return _rpfManager.EntryDict.Count;

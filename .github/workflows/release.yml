@@ -41,10 +41,11 @@ jobs:
           nuget restore "${{ github.workspace }}/CodeWalker.Core/CodeWalker.Core.csproj"
           nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
 
-      - name: Build CodeWalker.API
+      - name: Publish CodeWalker.API (as admin-elevated .exe)
         run: |
           cd "${{ github.workspace }}/CodeWalker.API"
-          msbuild CodeWalker.API.csproj /p:Configuration=Release
+          dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+
 
       - name: Package Build Output as ZIP
         shell: cmd

@@ -62,14 +62,31 @@ public class ImportController : ControllerBase
         rpfPath ??= config.RpfArchivePath;
         outputFolder ??= config.FivemOutputDir;
 
+        _logger.LogDebug("Starting import. XML: {IsXml}, RPF: {RpfPath}, Output: {OutputFolder}", isXml, rpfPath, outputFolder);
+
         if (paths == null || paths.Count == 0)
+        {
+            _logger.LogDebug("No file paths provided.");
             return BadRequest("No files provided.");
+        }
+
         if (string.IsNullOrWhiteSpace(rpfPath))
+        {
+            _logger.LogDebug("Missing RPF path.");
             return BadRequest("Missing RPF archive path.");
+        }
+
         if (!_rpfService.TryResolveEntryPath(rpfPath, out var rpfFile, out var targetDir, out _, out var err))
+        {
+            _logger.LogDebug("Failed to resolve RPF path: {Error}", err);
             return BadRequest($"Failed to resolve RPF path: {err}");
+        }
+
         if (targetDir == null)
+        {
+            _logger.LogDebug("Target directory inside RPF was null.");
             return BadRequest("Target directory inside RPF was null.");
+        }
 
         var results = new List<object>();
 
@@ -77,6 +94,7 @@ public class ImportController : ControllerBase
         {
             if (!System.IO.File.Exists(filePath))
             {
+                _logger.LogDebug("File does not exist: {Path}", filePath);
                 results.Add(new { filePath, error = "File not found." });
                 continue;
             }
@@ -89,6 +107,8 @@ public class ImportController : ControllerBase
 
                 if (isXml)
                 {
+                    _logger.LogDebug("Processing XML file: {File}", filePath);
+
                     var xmlText = await System.IO.File.ReadAllTextAsync(filePath);
                     var doc = new System.Xml.XmlDocument();
                     doc.LoadXml(xmlText);
@@ -96,32 +116,39 @@ public class ImportController : ControllerBase
                     var format = XmlMeta.GetXMLFormat(filePath.ToLower(), out int trimLength);
                     if (format == MetaFormat.XML)
                     {
+                        _logger.LogDebug("Unhandled XML format for file: {File}", filePath);
                         results.Add(new { filePath, error = "Unknown or unhandled XML format." });
                         continue;
                     }
 
-                    var fullFilename = Path.GetFileNameWithoutExtension(filePath); // e.g. "prop_something.ytyp"
-                    modelName = fullFilename[..^trimLength];                       // e.g. "prop_something"
-                    var ext = Path.GetExtension(fullFilename);                     // e.g. ".ytyp"
-                    finalName = Path.ChangeExtension(modelName, ext);              // e.g. "prop_something.ytyp"
+                    var fullFilename = Path.GetFileNameWithoutExtension(filePath);
+                    modelName = fullFilename[..^trimLength];
+                    var ext = Path.GetExtension(fullFilename);
+                    finalName = Path.ChangeExtension(modelName, ext);
 
                     var texFolder = Path.Combine(Path.GetDirectoryName(filePath) ?? "", modelName);
                     if (!Directory.Exists(texFolder)) texFolder = null;
 
                     data = XmlMeta.GetData(doc, format, texFolder);
+
                     if (data == null)
                     {
+                        _logger.LogDebug("Failed to convert XML to binary for file: {File}", filePath);
                         results.Add(new { filePath, error = "Failed to convert XML." });
                         continue;
                     }
+
+                    _logger.LogDebug("XML converted successfully. Model: {Model}, Ext: {Ext}", modelName, ext);
                 }
                 else
                 {
+                    _logger.LogDebug("Reading raw file: {File}", filePath);
                     data = await System.IO.File.ReadAllBytesAsync(filePath);
                     finalName = Path.GetFileName(filePath);
                     modelName = Path.GetFileNameWithoutExtension(filePath);
                 }
 
+                _logger.LogDebug("Creating file in RPF: {FinalName} (Size: {Size} bytes)", finalName, data.Length);
                 var entry = RpfFile.CreateFile(targetDir, finalName, data);
 
                 string? outPath = null;
@@ -130,9 +157,21 @@ public class ImportController : ControllerBase
                     outPath = Path.Combine(outputFolder, finalName);
                     var temp = Path.Combine(outputFolder, modelName + ".tmp");
 
+                    _logger.LogDebug("Writing to temp file: {Temp}", temp);
                     await System.IO.File.WriteAllBytesAsync(temp, data);
-                    if (System.IO.File.Exists(outPath)) System.IO.File.Delete(outPath);
+
+                    if (System.IO.File.Exists(outPath))
+                    {
+                        _logger.LogDebug("Deleting existing file: {Out}", outPath);
+                        System.IO.File.Delete(outPath);
+                    }
+
                     System.IO.File.Move(temp, outPath);
+                    _logger.LogDebug("Moved temp to final: {Out}", outPath);
+                }
+                else
+                {
+                    _logger.LogDebug("Output folder is empty, skipping write.");
                 }
 
                 results.Add(new
@@ -143,13 +182,17 @@ public class ImportController : ControllerBase
                     writtenTo = entry.Path,
                     outputFilePath = outPath
                 });
+
+                _logger.LogDebug("Import result added for: {File}", finalName);
             }
             catch (Exception ex)
             {
+                _logger.LogError(ex, "Exception while processing file: {File}", filePath);
                 results.Add(new { filePath, error = ex.Message });
             }
         }
 
+        _logger.LogDebug("Import completed. Processed {Count} file(s).", results.Count);
         return Ok(results);
     }
 }
