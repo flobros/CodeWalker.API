@@ -41,10 +41,10 @@ jobs:
           nuget restore "${{ github.workspace }}/CodeWalker.Core/CodeWalker.Core.csproj"
           nuget restore "${{ github.workspace }}/CodeWalker.API/CodeWalker.API.csproj"
 
-      - name: Publish CodeWalker.API (non-single-file)
-        run: |
-            cd "${{ github.workspace }}/CodeWalker.API"
-            dotnet publish -c Release -r win-x64 --self-contained true
+    - name: Publish CodeWalker.API (non-single-file)
+      run: |
+        cd "${{ github.workspace }}/CodeWalker.API"
+        dotnet publish -c Release -r win-x64 --self-contained true
 
 
 

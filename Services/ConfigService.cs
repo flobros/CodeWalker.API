@@ -10,7 +10,7 @@ namespace CodeWalker.API.Services
 
         public ConfigService()
         {
-            ConfigFilePath = Path.Combine(AppContext.BaseDirectory, "Config", "userconfig.json");
+            ConfigFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "userconfig.json");
             Load(); // Load from disk on startup
         }
 
