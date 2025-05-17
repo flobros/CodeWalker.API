@@ -1,5 +1,4 @@
 <Project Sdk="Microsoft.NET.Sdk.Web">
-
 	<PropertyGroup>
 		<TargetFramework>net9.0</TargetFramework>
 		<Nullable>enable</Nullable>
@@ -26,5 +25,10 @@
 		<Folder Include="Config\" />
 		<Folder Include="Models\" />
 	</ItemGroup>
-
+	
+	<ItemGroup>
+		<None Update="Config\userconfig.json">
+			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+		</None>
+	</ItemGroup>
 </Project>

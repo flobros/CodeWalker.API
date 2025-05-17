@@ -56,6 +56,7 @@ namespace CodeWalker.API.Services
                 }
                 else
                 {
+                    Console.WriteLine($"[CONFIG] MISSING: {ConfigFilePath}");
                     Console.WriteLine("[CONFIG] No existing config found. Using defaults.");
                 }
             }
