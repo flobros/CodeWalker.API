@@ -31,15 +31,18 @@
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
-		<None Update="strings.txt">
+		<None Include="..\CodeWalker.Core\strings.txt">
+			<Link>strings.txt</Link>
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
-		<None Update="ShadersGen9Conversion.xml">
+		<None Include="..\CodeWalker.Core\ShadersGen9Conversion.xml">
+			<Link>ShadersGen9Conversion.xml</Link>
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
-		<None Update="Resources\magic.dat">
+		<None Include="..\CodeWalker.Core\Resources\magic.dat">
+			<Link>Resources\magic.dat</Link>
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
 			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
