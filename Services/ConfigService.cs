@@ -1,4 +1,4 @@
-using CodeWalker.API.Models;
+﻿using CodeWalker.API.Models;
 using System.Text.Json;
 
 namespace CodeWalker.API.Services
@@ -32,11 +32,11 @@ namespace CodeWalker.API.Services
 
                 var json = JsonSerializer.Serialize(_config, new JsonSerializerOptions { WriteIndented = true });
                 File.WriteAllText(ConfigFilePath, json);
-                Console.WriteLine($"[CONFIG] Saved to {ConfigFilePath}");
+                Console.WriteLine($"[CONFIG] ✅ Saved to {ConfigFilePath}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Failed to save config: {ex.Message}");
+                Console.WriteLine($"[CONFIG] ❌ Failed to save config: {ex.Message}");
             }
         }
 
@@ -44,25 +44,33 @@ namespace CodeWalker.API.Services
         {
             try
             {
-                if (File.Exists(ConfigFilePath))
+                Console.WriteLine($"[CONFIG] Looking for config at: {Path.GetFullPath(ConfigFilePath)}");
+                if (!File.Exists(ConfigFilePath))
                 {
-                    var json = File.ReadAllText(ConfigFilePath);
-                    var loadedConfig = JsonSerializer.Deserialize<ApiConfig>(json);
-                    if (loadedConfig != null)
-                    {
-                        _config = loadedConfig;
-                        Console.WriteLine($"[CONFIG] Loaded config from {ConfigFilePath}");
-                    }
+                    Console.WriteLine($"[CONFIG] ❌ File missing: {ConfigFilePath}");
+                    return;
                 }
-                else
+
+                var json = File.ReadAllText(ConfigFilePath);
+                Console.WriteLine($"[CONFIG] Raw JSON: {json}");
+
+                var loadedConfig = JsonSerializer.Deserialize<ApiConfig>(json);
+                if (loadedConfig == null)
                 {
-                    Console.WriteLine($"[CONFIG] MISSING: {ConfigFilePath}");
-                    Console.WriteLine("[CONFIG] No existing config found. Using defaults.");
+                    Console.WriteLine($"[CONFIG] ❌ Failed to parse config.");
+                    return;
                 }
+
+                _config = loadedConfig;
+                Console.WriteLine($"[CONFIG] ✅ Loaded config from {ConfigFilePath}");
+                Console.WriteLine($"[CONFIG] GTAPath = {_config.GTAPath}");
+
+                if (string.IsNullOrWhiteSpace(_config.GTAPath))
+                    Console.WriteLine($"[CONFIG] ⚠️ WARNING: GTAPath is null or empty!");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"[ERROR] Failed to load config: {ex.Message}");
+                Console.WriteLine($"[CONFIG] ❌ Failed to load config: {ex.Message}");
             }
         }
     }
