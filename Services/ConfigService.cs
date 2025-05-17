@@ -45,6 +45,7 @@ namespace CodeWalker.API.Services
             try
             {
                 Console.WriteLine($"[CONFIG] Looking for config at: {Path.GetFullPath(ConfigFilePath)}");
+
                 if (!File.Exists(ConfigFilePath))
                 {
                     Console.WriteLine($"[CONFIG] ❌ File missing: {ConfigFilePath}");
@@ -66,12 +67,16 @@ namespace CodeWalker.API.Services
                 Console.WriteLine($"[CONFIG] GTAPath = {_config.GTAPath}");
 
                 if (string.IsNullOrWhiteSpace(_config.GTAPath))
-                    Console.WriteLine($"[CONFIG] ⚠️ WARNING: GTAPath is null or empty!");
+                {
+                    Console.Error.WriteLine($"[CONFIG] ❌ GTAPath is null or empty. Cannot continue.");
+                    Environment.Exit(1); // Hard stop
+                }
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"[CONFIG] ❌ Failed to load config: {ex.Message}");
             }
         }
+
     }
 }
