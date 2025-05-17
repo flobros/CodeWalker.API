@@ -5,11 +5,12 @@ namespace CodeWalker.API.Services
 {
     public class ConfigService
     {
-        private const string ConfigFilePath = "Config/userconfig.json";
+        private readonly string ConfigFilePath;
         private ApiConfig _config = new();
 
         public ConfigService()
         {
+            ConfigFilePath = Path.Combine(AppContext.BaseDirectory, "Config", "userconfig.json");
             Load(); // Load from disk on startup
         }
 
@@ -38,7 +39,6 @@ namespace CodeWalker.API.Services
                 Console.WriteLine($"[ERROR] Failed to save config: {ex.Message}");
             }
         }
-
 
         private void Load()
         {
