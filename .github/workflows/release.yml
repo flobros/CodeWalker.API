@@ -47,23 +47,21 @@ jobs:
           dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
 
 
-      - name: Package EXE and userconfig folder as ZIP
+      - name: Package published output as ZIP
         shell: cmd
         run: |
             @echo on
             set PUBLISH_DIR=${{ github.workspace }}\CodeWalker.API\bin\Release\net9.0\win-x64\publish
             set OUTPUT_ZIP=${{ github.workspace }}\CodeWalker.API.zip
-            set EXE=%PUBLISH_DIR%\CodeWalker.API.exe
-
-            echo "Zipping EXE and userconfig..."
-            powershell Compress-Archive -Path "%EXE%", "${{ github.workspace }}\CodeWalker.API\Config\*" -DestinationPath "%OUTPUT_ZIP%"
-
+            echo "Zipping full publish directory..."
+            powershell Compress-Archive -Path "%PUBLISH_DIR%\*" -DestinationPath "%OUTPUT_ZIP%"
             if not exist "%OUTPUT_ZIP%" (
                 echo "❌ ERROR: ZIP file was not created!"
                 exit 1
             ) else (
                 echo "✅ ZIP file created successfully."
             )
+
 
 
       - name: Debug - List Workspace Contents
