@@ -25,10 +25,12 @@
 		<Folder Include="Config\" />
 		<Folder Include="Models\" />
 	</ItemGroup>
-	
+
 	<ItemGroup>
 		<None Update="Config\userconfig.json">
 			<CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+			<CopyToPublishDirectory>Always</CopyToPublishDirectory>
 		</None>
 	</ItemGroup>
+
 </Project>
