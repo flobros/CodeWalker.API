@@ -56,7 +56,7 @@ jobs:
             set EXE=%PUBLISH_DIR%\CodeWalker.API.exe
 
             echo "Zipping EXE and userconfig..."
-            powershell Compress-Archive -Path "%EXE%", "${{ github.workspace }}\CodeWalker.API\userconfig\*" -DestinationPath "%OUTPUT_ZIP%"
+            powershell Compress-Archive -Path "%EXE%", "${{ github.workspace }}\CodeWalker.API\Config\*" -DestinationPath "%OUTPUT_ZIP%"
 
             if not exist "%OUTPUT_ZIP%" (
                 echo "❌ ERROR: ZIP file was not created!"
