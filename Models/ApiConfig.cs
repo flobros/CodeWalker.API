@@ -8,6 +8,7 @@
         public string RpfArchivePath { get; set; } = "";
         public string GTAPath { get; set; } = "";
         public int Port { get; set; } = 0;
+        public bool EnableMods { get; set; } = false;
     }
 }
 
