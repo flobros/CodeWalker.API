@@ -43,7 +43,7 @@ builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
     double cacheTime = 60.0;
     bool isGen9 = false;
     string dlc = "";
-    bool enableMods = false;
+    bool enableMods = config.EnableMods;
     string excludeFolders = "";
 
     var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaPath, isGen9, dlc, enableMods, excludeFolders);

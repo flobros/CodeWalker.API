@@ -17,9 +17,12 @@ public class RpfService
     {
         _logger = logger;
         _configService = configService;
-        string gtaPath = _configService.Get().GTAPath;
+        var config = _configService.Get();
+        string gtaPath = config.GTAPath;
+        bool enableMods = config.EnableMods;
 
         _rpfManager = new RpfManager();
+        _rpfManager.EnableMods = enableMods;
         _rpfManager.Init(gtaPath, false, Console.WriteLine, Console.Error.WriteLine);
     }
 
@@ -31,11 +34,20 @@ public class RpfService
     public List<string> SearchFile(string filename)
     {
         var results = new List<string>();
-        foreach (var entry in _rpfManager.EntryDict.Values)
+        var searchDicts = new List<Dictionary<string, RpfEntry>> { _rpfManager.EntryDict };
+        if (_rpfManager.EnableMods)
         {
-            if (entry.Name.Contains(filename, StringComparison.OrdinalIgnoreCase))
+            searchDicts.Add(_rpfManager.ModEntryDict);
+        }
+
+        foreach (var dict in searchDicts)
+        {
+            foreach (var entry in dict.Values)
             {
-                results.Add(entry.Path);
+                if (entry.Name.Contains(filename, StringComparison.OrdinalIgnoreCase))
+                {
+                    results.Add(entry.Path);
+                }
             }
         }
         return results;
@@ -119,7 +131,7 @@ public class RpfService
 
             var virtualPath = ToVirtualPath(fullPath); // now backslash-correct
 
-            // Case 1: It’s a folder
+            // Case 1: It's a folder
             var entry = _rpfManager.GetEntry(virtualPath);
             if (entry is RpfDirectoryEntry dirEntry)
             {
@@ -128,7 +140,7 @@ public class RpfService
                 return true;
             }
 
-            // Case 2: It’s an RPF file
+            // Case 2: It's an RPF file
             if (virtualPath.EndsWith(".rpf", StringComparison.OrdinalIgnoreCase))
             {
                 _logger.LogDebug("[TryResolve] Trying FindRpfFile({Path})", virtualPath);
