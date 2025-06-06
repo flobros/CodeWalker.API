@@ -1,9 +1,8 @@
 {
-  "CodewalkerOutputDir": "",
-  "BlenderOutputDir": "",
-  "FivemOutputDir": "",
-  "RpfArchivePath": "",
-  "GTAPath": "Y:\\Grand Theft Auto V",
+  "CodewalkerOutputDir": "C:\\GTA_FILES\\cw_out",
+  "BlenderOutputDir": "C:\\GTA_FILES\\blender_out",
+  "FivemOutputDir": "C:\\GTA_FILES\\fivem_out",
+  "RpfArchivePath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V\\modstore\\new.rpf",
   "Port": 5555,
   "EnableMods": true
 } 
