@@ -18,6 +18,12 @@ var builder = WebApplication.CreateBuilder(args);
 // ✅ Register ConfigService
 builder.Services.AddSingleton<ConfigService>();
 
+// ✅ Register ServiceFactory
+builder.Services.AddSingleton<ServiceFactory>();
+
+// ✅ Register ReloadableServiceContainer
+builder.Services.AddSingleton<ReloadableServiceContainer>();
+
 // ✅ Logging setup
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
@@ -30,38 +36,25 @@ builder.Services.AddSwaggerGen(c =>
     c.SwaggerDoc("v1", new OpenApiInfo { Title = "CodeWalker API", Version = "v1" });
     c.EnableAnnotations();
 });
-builder.Services.AddControllers();
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = null; // Use PascalCase
+    });
 
-// ✅ Register GameFileCache
-builder.Services.AddSingleton<GameFileCache>(serviceProvider =>
+// ✅ Register RpfService as transient (will be managed by ReloadableServiceContainer)
+builder.Services.AddTransient<RpfService>(serviceProvider =>
 {
-    var configService = serviceProvider.GetRequiredService<ConfigService>();
-    var config = configService.Get();
-    string gtaPath = config.GTAPath;
-
-    long cacheSize = 2L * 1024 * 1024 * 1024; // 2GB Cache
-    double cacheTime = 60.0;
-    bool isGen9 = false;
-    string dlc = "";
-    bool enableMods = false;
-    string excludeFolders = "";
-
-    var gameFileCache = new GameFileCache(cacheSize, cacheTime, gtaPath, isGen9, dlc, enableMods, excludeFolders);
-    gameFileCache.EnableDlc = true; // this ensures Init() runs InitDlc()
-    gameFileCache.Init(
-        message => Console.WriteLine($"[GameFileCache] {message}"),
-        error => Console.Error.WriteLine($"[GameFileCache ERROR] {error}")
-    );
-    Console.WriteLine("[Startup] Archetypes loaded: " + gameFileCache.YtypDict?.Count);
-    return gameFileCache;
+    var container = serviceProvider.GetRequiredService<ReloadableServiceContainer>();
+    var logger = serviceProvider.GetRequiredService<ILogger<RpfService>>();
+    return container.GetRpfService(logger);
 });
 
-// ✅ Register RpfService with logging support
-builder.Services.AddSingleton<RpfService>(serviceProvider =>
+// ✅ Register GameFileCache as transient (will be managed by ReloadableServiceContainer)
+builder.Services.AddTransient<GameFileCache>(serviceProvider =>
 {
-    var logger = serviceProvider.GetRequiredService<ILogger<RpfService>>();
-    var configService = serviceProvider.GetRequiredService<ConfigService>();
-    return new RpfService(logger, configService);
+    var container = serviceProvider.GetRequiredService<ReloadableServiceContainer>();
+    return container.GetGameFileCache();
 });
 
 // ✅ Build the app
@@ -79,24 +72,42 @@ if (port == 0)
     port = 5555;
 }
 
-// ✅ Ensure GTA V directory exists
-if (!Directory.Exists(gtaPath))
+// ✅ Check GTA V directory but don't exit if invalid
+bool gtaPathValid = false;
+if (!string.IsNullOrWhiteSpace(gtaPath))
 {
-    Console.Error.WriteLine($"[ERROR] GTA V directory not found at {gtaPath}");
-    return;
+    if (Directory.Exists(gtaPath))
+    {
+        gtaPathValid = true;
+        Console.WriteLine($"[INFO] GTA V directory found at {gtaPath}");
+    }
+    else
+    {
+        Console.WriteLine($"[WARN] GTA V directory not found at {gtaPath}");
+        Console.WriteLine("[INFO] API will start but services will not be initialized until a valid GTA path is configured.");
+    }
+}
+else
+{
+    Console.WriteLine("[WARN] GTA path is not configured.");
+    Console.WriteLine("[INFO] API will start but services will not be initialized until a valid GTA path is configured.");
 }
 
-// ✅ Load RPF decryption keys
-try
+// ✅ Try to load RPF decryption keys if GTA path is valid
+if (gtaPathValid)
 {
-    Console.WriteLine("[INFO] Loading RPF decryption keys...");
-    GTA5Keys.LoadFromPath(gtaPath);
-    Console.WriteLine("[INFO] RPF decryption keys loaded successfully.");
-}
-catch (Exception ex)
-{
-    Console.Error.WriteLine($"[ERROR] Failed to load RPF keys: {ex.Message}");
-    return;
+    try
+    {
+        Console.WriteLine("[INFO] Loading RPF decryption keys...");
+        GTA5Keys.LoadFromPath(gtaPath);
+        Console.WriteLine("[INFO] RPF decryption keys loaded successfully.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[WARN] Failed to load RPF keys: {ex.Message}");
+        Console.WriteLine("[INFO] API will start but services will not be initialized until a valid GTA path is configured.");
+        gtaPathValid = false;
+    }
 }
 
 // ✅ Bind the server to the configured port
@@ -105,6 +116,12 @@ app.Urls.Add($"http://0.0.0.0:{port}");
 // ✅ Logging API startup
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation($"API is starting on port {port}...");
+
+if (!gtaPathValid)
+{
+    logger.LogWarning("API is starting with invalid GTA path. Use /api/set-config to configure a valid GTA path.");
+    Console.WriteLine("[INFO] API is ready. Use the config endpoints to set a valid GTA path.");
+}
 
 // ✅ Swagger setup
 app.UseSwagger();
@@ -117,29 +134,39 @@ app.UseRouting();
 app.UseAuthorization();
 app.MapControllers();
 
-// ✅ (Cache) preheating
-var rpfService = app.Services.GetRequiredService<RpfService>();
-int count = rpfService.Preheat();
-try
+// ✅ Only preheat if GTA path is valid
+if (gtaPathValid)
 {
-    var gameFileCache = app.Services.GetRequiredService<GameFileCache>();
-    Console.WriteLine("[Startup] Preloading cache with known meta types...");
-    // Preload by hash
-    uint hash = JenkHash.GenHash("prop_alien_egg_01");
-    var ydr = gameFileCache.GetYdr(hash);
-    if (ydr != null)
-        Console.WriteLine("[Startup] YDR preloaded successfully.");
-    else
-        Console.WriteLine("[Startup] YDR not found in archive.");
+    try
+    {
+        var rpfService = app.Services.GetRequiredService<RpfService>();
+        int count = rpfService.Preheat();
+        
+        var gameFileCache = app.Services.GetRequiredService<GameFileCache>();
+        Console.WriteLine("[Startup] Preloading cache with known meta types...");
+        // Preload by hash
+        uint hash = JenkHash.GenHash("prop_alien_egg_01");
+        var ydr = gameFileCache.GetYdr(hash);
+        if (ydr != null)
+            Console.WriteLine("[Startup] YDR preloaded successfully.");
+        else
+            Console.WriteLine("[Startup] YDR not found in archive.");
 
-    Console.WriteLine("[Startup] Archetype dict contains: " + gameFileCache.GetArchetype(hash)?.Name);
+        Console.WriteLine("[Startup] Archetype dict contains: " + gameFileCache.GetArchetype(hash)?.Name);
+        
+        logger.LogInformation($"[Startup] Preheated RPF with {count} entries.");
+    }
+    catch (Exception ex)
+    {
+        Console.WriteLine($"[Startup ERROR] Cache preloading failed: {ex.Message}");
+        logger.LogError(ex, "[Startup] Failed to preheat services");
+    }
 }
-catch (Exception ex)
+else
 {
-    Console.WriteLine($"[Startup ERROR] Cache preloading failed: {ex.Message}");
+    Console.WriteLine("[INFO] Skipping service preheating due to invalid GTA path.");
+    Console.WriteLine("[INFO] Services will be initialized when a valid GTA path is configured.");
 }
-
-logger.LogInformation($"[Startup] Preheated RPF with {count} entries.");
 
 // ✅ Run the app
 app.Run();

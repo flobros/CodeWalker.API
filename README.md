@@ -23,6 +23,46 @@ The API now reads its configuration from a `Config/userconfig.json` file located
 }
 ```
 
+## 🔄 Service Reloading
+
+The API now supports automatic and manual service reloading when the GTA path changes:
+
+### Automatic Reload
+When you update the `GTAPath` configuration via the API, the system automatically:
+- Detects the GTA path change
+- Reloads RPF decryption keys from the new path
+- **Immediately recreates all services** (RpfService, GameFileCache)
+- **Preheats the new services** (loads RPF entries and caches)
+- Preloads known meta types for optimal performance
+
+### Manual Reload
+You can manually trigger a service reload using the `/api/reload-services` endpoint:
+
+```bash
+POST http://localhost:5555/api/reload-services
+```
+
+This is useful when you want to ensure all services are using the latest configuration immediately.
+
+### Service Status
+Check the current service status using the `/api/service-status` endpoint:
+
+```bash
+GET http://localhost:5555/api/service-status
+```
+
+This returns the current GTA path, reload version, and service readiness status.
+
+### Graceful Startup with Invalid GTA Path
+The API now starts gracefully even when the initial GTA path is invalid:
+
+- **No Hard Exit**: The API will start and run even with an invalid GTA path
+- **Helpful Messages**: Clear error messages guide users to fix the configuration
+- **Service Status**: Use `/api/service-status` to check if services are ready
+- **Easy Fix**: Use `/api/set-config` to set a valid GTA path and automatically reload services
+
+When the GTA path is invalid, API endpoints will return a `503 Service Unavailable` status with helpful error messages and instructions on how to fix the issue.
+
 ## 🚀 Running the API
 
 To start the API, simply execute:
@@ -41,6 +81,8 @@ The API will run on the configured port (default: `5555`).
 - Search for files within RPF archives
 - Import XML or raw files back into RPF
 - Replace existing files in RPFs
+- **Automatic service reloading when GTA path changes**
+- **Manual service reloading via API endpoint**
 
 ## 🌐 Swagger UI (Recommended for Testing)
 

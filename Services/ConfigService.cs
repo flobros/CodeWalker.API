@@ -7,20 +7,40 @@ namespace CodeWalker.API.Services
     {
         private readonly string ConfigFilePath;
         private ApiConfig _config = new();
+        private string _lastGtaPath = "";
+
+        // Event to notify when GTA path changes
+        public event Action<string>? GtaPathChanged;
 
         public ConfigService()
         {
             ConfigFilePath = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Config", "userconfig.json");
             Load(); // Load from disk on startup
+            _lastGtaPath = _config.GTAPath; // Store initial GTA path
         }
 
         public ApiConfig Get() => _config;
 
         public void Set(ApiConfig config)
         {
+            var oldGtaPath = _config.GTAPath;
             _config = config;
             Save();
+            
+            // Check if GTA path has changed
+            if (!string.Equals(oldGtaPath, config.GTAPath, StringComparison.OrdinalIgnoreCase))
+            {
+                _lastGtaPath = config.GTAPath;
+                GtaPathChanged?.Invoke(config.GTAPath);
+            }
         }
+
+        public bool HasGtaPathChanged()
+        {
+            return !string.Equals(_lastGtaPath, _config.GTAPath, StringComparison.OrdinalIgnoreCase);
+        }
+
+        public string GetCurrentGtaPath() => _config.GTAPath;
 
         private void Save()
         {

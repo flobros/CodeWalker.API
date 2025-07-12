@@ -39,6 +39,7 @@ namespace CodeWalker.API.Controllers
         )]
         [SwaggerResponse(200, "Successful operation", typeof(List<object>))]
         [SwaggerResponse(400, "Bad request")]
+        [SwaggerResponse(503, "Service unavailable - GTA path not configured")]
         public IActionResult DownloadFiles(
             [FromQuery, SwaggerParameter("List of full RPF paths", Required = true)]
             string[] fullPaths,
@@ -65,76 +66,87 @@ namespace CodeWalker.API.Controllers
             Directory.CreateDirectory(codewalkerOutput);
             var results = new List<object>();
 
-            foreach (var originalPath in fullPaths)
+            try
             {
-                var fullRpfPath = PathUtils.NormalizePath(originalPath);
-                try
+                foreach (var originalPath in fullPaths)
                 {
-                    var extractedFile = _rpfService.ExtractFileWithEntry(fullRpfPath);
-                    if (!extractedFile.HasValue)
+                    var fullRpfPath = PathUtils.NormalizePath(originalPath);
+                    try
                     {
-                        _logger.LogWarning($"File '{fullRpfPath}' not found.");
-                        results.Add(new { fullRpfPath, error = $"File '{fullRpfPath}' not found." });
-                        continue;
-                    }
-
-                    var (fileBytes, entry) = extractedFile.Value;
-                    string filename = Path.GetFileName(fullRpfPath);
-                    string filenameWithoutExt = Path.GetFileNameWithoutExtension(fullRpfPath);
-                    string objectFilePath = Path.Combine(codewalkerOutput, filename);
-
-                    if (xml)
-                    {
-                        string newFilename;
-                        string xmlData = MetaXml.GetXml(entry, fileBytes, out newFilename, codewalkerOutput);
-                        if (string.IsNullOrEmpty(xmlData))
+                        var extractedFile = _rpfService.ExtractFileWithEntry(fullRpfPath);
+                        if (!extractedFile.HasValue)
                         {
-                            results.Add(new { fullRpfPath, error = $"XML export unavailable for {Path.GetExtension(fullRpfPath)}" });
+                            _logger.LogWarning($"File '{fullRpfPath}' not found.");
+                            results.Add(new { fullRpfPath, error = $"File '{fullRpfPath}' not found." });
                             continue;
                         }
 
-                        string ext = Path.GetExtension(fullRpfPath)?.TrimStart('.') ?? "bin";
-                        string xmlFilePath = Path.Combine(codewalkerOutput, $"{filenameWithoutExt}.{ext}.xml");
-                        System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
-                        results.Add(new { fullRpfPath, message = "XML saved successfully.", xmlFilePath });
-                    }
+                        var (fileBytes, entry) = extractedFile.Value;
+                        string filename = Path.GetFileName(fullRpfPath);
+                        string filenameWithoutExt = Path.GetFileNameWithoutExtension(fullRpfPath);
+                        string objectFilePath = Path.Combine(codewalkerOutput, filename);
 
-                    if (textures)
-                    {
-                        string textureFolder = Path.Combine(codewalkerOutput, filenameWithoutExt);
-                        Directory.CreateDirectory(textureFolder);
-                        string tempYdrPath = Path.Combine(Path.GetTempPath(), filename);
-                        System.IO.File.WriteAllBytes(tempYdrPath, fileBytes);
-                        _textureExtractor.ExtractTextures(fileBytes, entry, textureFolder);
-                        System.IO.File.Delete(tempYdrPath);
-
-                        results.Add(new { fullRpfPath, message = "Textures extracted successfully.", textureFolderPath = textureFolder });
-
-                        // ✅ Also copy to Blender Output Dir
-                        if (!string.IsNullOrWhiteSpace(blenderOutput))
+                        if (xml)
                         {
-                            string dest = Path.Combine(blenderOutput, filenameWithoutExt);
-                            if (Directory.Exists(dest)) Directory.Delete(dest, true);
-                            Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
-                            DirUtils.CopyDirectory(textureFolder, dest);
-                            results.Add(new { fullRpfPath, message = "Textures copied to Blender output.", copiedTo = dest });
+                            string newFilename;
+                            string xmlData = MetaXml.GetXml(entry, fileBytes, out newFilename, codewalkerOutput);
+                            if (string.IsNullOrEmpty(xmlData))
+                            {
+                                results.Add(new { fullRpfPath, error = $"XML export unavailable for {Path.GetExtension(fullRpfPath)}" });
+                                continue;
+                            }
+
+                            string ext = Path.GetExtension(fullRpfPath)?.TrimStart('.') ?? "bin";
+                            string xmlFilePath = Path.Combine(codewalkerOutput, $"{filenameWithoutExt}.{ext}.xml");
+                            System.IO.File.WriteAllText(xmlFilePath, xmlData, Encoding.UTF8);
+                            results.Add(new { fullRpfPath, message = "XML saved successfully.", xmlFilePath });
+                        }
+
+                        if (textures)
+                        {
+                            string textureFolder = Path.Combine(codewalkerOutput, filenameWithoutExt);
+                            Directory.CreateDirectory(textureFolder);
+                            string tempYdrPath = Path.Combine(Path.GetTempPath(), filename);
+                            System.IO.File.WriteAllBytes(tempYdrPath, fileBytes);
+                            _textureExtractor.ExtractTextures(fileBytes, entry, textureFolder);
+                            System.IO.File.Delete(tempYdrPath);
+
+                            results.Add(new { fullRpfPath, message = "Textures extracted successfully.", textureFolderPath = textureFolder });
+
+                            // ✅ Also copy to Blender Output Dir
+                            if (!string.IsNullOrWhiteSpace(blenderOutput))
+                            {
+                                string dest = Path.Combine(blenderOutput, filenameWithoutExt);
+                                if (Directory.Exists(dest)) Directory.Delete(dest, true);
+                                Directory.CreateDirectory(Path.GetDirectoryName(dest)!);
+                                DirUtils.CopyDirectory(textureFolder, dest);
+                                results.Add(new { fullRpfPath, message = "Textures copied to Blender output.", copiedTo = dest });
+                            }
+                        }
+
+                        if (!xml)
+                        {
+                            System.IO.File.WriteAllBytes(objectFilePath, fileBytes);
+                            results.Add(new { fullRpfPath, message = "File saved successfully.", objectFilePath });
                         }
                     }
-
-                    if (!xml)
+                    catch (Exception ex)
                     {
-                        System.IO.File.WriteAllBytes(objectFilePath, fileBytes);
-                        results.Add(new { fullRpfPath, message = "File saved successfully.", objectFilePath });
+                        _logger.LogError($"Error processing {fullRpfPath}: {ex.Message}");
+                        results.Add(new { fullRpfPath, error = ex.Message });
                     }
                 }
-                catch (Exception ex)
-                {
-                    _logger.LogError($"Error processing {fullRpfPath}: {ex.Message}");
-                    results.Add(new { fullRpfPath, error = ex.Message });
-                }
-            }
 
-            return Ok(results);
+                return Ok(results);
+            }
+            catch (InvalidOperationException ex)
+            {
+                return StatusCode(503, new { 
+                    error = "Service unavailable", 
+                    message = ex.Message,
+                    solution = "Use /api/set-config to configure a valid GTA path"
+                });
+            }
         }
     }
 }

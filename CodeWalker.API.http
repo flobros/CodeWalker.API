@@ -91,6 +91,45 @@ Content-Type: application/json
   "Port": 5555
 }
 
+### ✅ Reload Services (Manual Trigger)
+# This request manually triggers a reload of all services (RpfService, GameFileCache, etc.)
+# This is useful when you've changed the GTA path and want to ensure all services are using the new path.
+POST {{CodeWalkerAPI_HostAddress}}/api/reload-services
+Accept: application/json
+
+### ✅ Get Service Status
+# This request retrieves the current service status including reload version and GTA path.
+GET {{CodeWalkerAPI_HostAddress}}/api/service-status
+Accept: application/json
+
+### ✅ Example: Service Status with Invalid GTA Path
+# When the GTA path is invalid, you'll get a response like:
+# {
+#   "gtaPath": "C:\\Invalid\\Path",
+#   "servicesReady": false,
+#   "statusMessage": "GTA V directory not found at C:\\Invalid\\Path",
+#   "reloadVersion": 0,
+#   "timestamp": "2024-01-01T12:00:00.000Z"
+# }
+
+### ✅ Example: Service Status with Valid GTA Path
+# When the GTA path is valid, you'll get a response like:
+# {
+#   "gtaPath": "C:\\Program Files\\Rockstar Games\\Grand Theft Auto V",
+#   "servicesReady": true,
+#   "statusMessage": "Services are ready",
+#   "reloadVersion": 1,
+#   "timestamp": "2024-01-01T12:00:00.000Z"
+# }
+
+### ✅ Example: Error Response When GTA Path is Invalid
+# When you try to use an endpoint with an invalid GTA path, you'll get:
+# {
+#   "error": "Service unavailable",
+#   "message": "GTA V directory not found at C:\\Invalid\\Path. Please use /api/set-config to set a valid GTA path.",
+#   "solution": "Use /api/set-config to configure a valid GTA path"
+# }
+
 ### ✅ Jenkins Hash Generation (UTF8 default)
 GET {{CodeWalkerAPI_HostAddress}}/api/hash/jenkins?input=prop_alien_egg_01
 Accept: application/json

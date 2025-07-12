@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 
 public class RpfService
 {
-    private readonly RpfManager _rpfManager;
+    private RpfManager _rpfManager;
     private readonly ILogger<RpfService> _logger;
     private readonly ConfigService _configService;
 
@@ -17,10 +17,26 @@ public class RpfService
     {
         _logger = logger;
         _configService = configService;
-        string gtaPath = _configService.Get().GTAPath;
+        InitializeRpfManager();
+    }
+
+    private void InitializeRpfManager()
+    {
+        var cfg = _configService.Get();
+        string gtaPath = cfg.GTAPath;
+        bool isGen9 = cfg.Gen9;
 
         _rpfManager = new RpfManager();
-        _rpfManager.Init(gtaPath, false, Console.WriteLine, Console.Error.WriteLine);
+        _rpfManager.Init(gtaPath, isGen9, Console.WriteLine, Console.Error.WriteLine);
+
+        _logger.LogInformation("[RpfService] Initialized with Gen9 = {Gen9}, GTA Path = {GtaPath}", isGen9, gtaPath);
+    }
+
+    public void Reload()
+    {
+        _logger.LogInformation("[RpfService] Reloading with new GTA path...");
+        InitializeRpfManager();
+        _logger.LogInformation("[RpfService] Reload completed. Entry count: {Count}", _rpfManager.EntryDict.Count);
     }
 
     private static string NormalizePath(string path)

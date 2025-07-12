@@ -32,6 +32,9 @@ public class ReplaceController : ControllerBase
     [HttpPost("replace-file")]
     [Consumes("application/json")]
     [SwaggerOperation(Summary = "Replaces a file in an RPF (JSON)", Description = "Replaces the file inside an RPF using a JSON body.")]
+    [SwaggerResponse(200, "File replaced successfully")]
+    [SwaggerResponse(400, "Bad request")]
+    [SwaggerResponse(503, "Service unavailable - GTA path not configured")]
     public IActionResult ReplaceFileJson([FromBody] ReplaceFileRequest jsonBody)
     {
         return HandleReplacement(jsonBody?.RpfFilePath, jsonBody?.LocalFilePath);
@@ -52,43 +55,42 @@ public class ReplaceController : ControllerBase
         if (string.IsNullOrWhiteSpace(localFilePath) || !System.IO.File.Exists(localFilePath))
             return BadRequest("Invalid or missing localFilePath.");
 
-        var fileName = Path.GetFileName(localFilePath);
-        if (string.IsNullOrWhiteSpace(fileName))
-            return BadRequest("Could not determine filename from localFilePath.");
-
         if (string.IsNullOrWhiteSpace(rpfFilePath))
-            return BadRequest("Missing rpfFilePath.");
-
-        if (!_rpfService.TryResolveEntryPath(rpfFilePath, out var rpfFile, out var targetDir, out var _, out var resolveError))
-        {
-            _logger.LogError("Failed to resolve RPF path: {Error}", resolveError);
-            return BadRequest("Failed to resolve RPF path: " + resolveError);
-        }
-
-        if (targetDir == null)
-            return BadRequest("Resolved directory was null. Can't replace file.");
+            return BadRequest("Invalid or missing rpfFilePath.");
 
         try
         {
-            var existing = targetDir.Files.FirstOrDefault(f => f.NameLower == fileName.ToLowerInvariant());
-            if (existing == null)
-                return NotFound($"File '{fileName}' not found in RPF.");
-
-            byte[] data = System.IO.File.ReadAllBytes(localFilePath);
-            RpfFile.CreateFile(targetDir, fileName, data);
-
-            return Ok(new
+            if (!_rpfService.TryResolveEntryPath(rpfFilePath, out var rpfFile, out var targetDir, out var fileName, out var resolveError))
             {
-                rpfFilePath,
-                replacedWith = localFilePath,
-                message = "File replaced successfully.",
-                newSize = data.Length
-            });
+                _logger.LogWarning("Failed to resolve RPF path: {Error}", resolveError);
+                return BadRequest($"Failed to resolve RPF path: {resolveError}");
+            }
+
+            if (targetDir == null)
+            {
+                _logger.LogWarning("Target directory is null.");
+                return BadRequest("Target directory is null.");
+            }
+
+            if (string.IsNullOrWhiteSpace(fileName))
+            {
+                _logger.LogWarning("File name is null or empty.");
+                return BadRequest("File name is null or empty.");
+            }
+
+            var localFileBytes = System.IO.File.ReadAllBytes(localFilePath);
+            var newEntry = RpfFile.CreateFile(targetDir, fileName, localFileBytes);
+
+            _logger.LogInformation("File replaced successfully: {Path}", newEntry.Path);
+            return Ok(new { message = "File replaced successfully.", path = newEntry.Path });
         }
-        catch (Exception ex)
+        catch (InvalidOperationException ex)
         {
-            _logger.LogError(ex, "Error replacing file in RPF");
-            return StatusCode(500, new { error = ex.Message });
+            return StatusCode(503, new { 
+                error = "Service unavailable", 
+                message = ex.Message,
+                solution = "Use /api/set-config to configure a valid GTA path"
+            });
         }
     }
 }

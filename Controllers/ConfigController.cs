@@ -10,10 +10,12 @@ namespace CodeWalker.API.Controllers
     public class ConfigController : ControllerBase
     {
         private readonly ConfigService _configService;
+        private readonly ReloadableServiceContainer _serviceContainer;
 
-        public ConfigController(ConfigService configService)
+        public ConfigController(ConfigService configService, ReloadableServiceContainer serviceContainer)
         {
             _configService = configService;
+            _serviceContainer = serviceContainer;
         }
 
         [HttpPost("set-config")]
@@ -51,7 +53,23 @@ namespace CodeWalker.API.Controllers
 
         private IActionResult MergeAndSaveConfig(ApiConfig merged)
         {
+            var oldConfig = _configService.Get();
+            var oldGtaPath = oldConfig.GTAPath;
+            
             _configService.Set(merged);
+            
+            // Check if GTA path changed
+            if (!string.Equals(oldGtaPath, merged.GTAPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return Ok(new { 
+                    message = "Configuration updated successfully. GTA path changed - services are being reloaded automatically.",
+                    gtaPathChanged = true,
+                    oldGtaPath = oldGtaPath,
+                    newGtaPath = merged.GTAPath,
+                    reloadVersion = _serviceContainer.GetReloadVersion()
+                });
+            }
+            
             return Ok(new { message = "Configuration updated successfully." });
         }
 
@@ -70,6 +88,67 @@ namespace CodeWalker.API.Controllers
         {
             _configService.Set(new ApiConfig());
             return Ok(new { message = "Configuration reset to defaults." });
+        }
+
+        [HttpGet("service-status")]
+        [SwaggerOperation(Summary = "Get service status", Description = "Retrieves the current service status including reload version and GTA path.")]
+        [SwaggerResponse(200, "Service status")]
+        public IActionResult GetServiceStatus()
+        {
+            var config = _configService.Get();
+            var gtaPath = config.GTAPath;
+            
+            bool servicesReady = false;
+            string statusMessage = "";
+            
+            if (string.IsNullOrWhiteSpace(gtaPath))
+            {
+                statusMessage = "GTA path is not configured";
+            }
+            else if (!Directory.Exists(gtaPath))
+            {
+                statusMessage = $"GTA V directory not found at {gtaPath}";
+            }
+            else
+            {
+                try
+                {
+                    // Try to get a service to see if they're working
+                    var testService = _serviceContainer.GetRpfService(new LoggerFactory().CreateLogger<RpfService>());
+                    servicesReady = true;
+                    statusMessage = "Services are ready";
+                }
+                catch (InvalidOperationException ex)
+                {
+                    statusMessage = ex.Message;
+                }
+            }
+            
+            return Ok(new { 
+                gtaPath = gtaPath,
+                servicesReady = servicesReady,
+                statusMessage = statusMessage,
+                reloadVersion = _serviceContainer.GetReloadVersion(),
+                timestamp = DateTime.UtcNow
+            });
+        }
+
+        [HttpPost("reload-services")]
+        [SwaggerOperation(Summary = "Reload services", Description = "Manually triggers a reload of all services (RpfService, GameFileCache, etc.) with the current configuration.")]
+        [SwaggerResponse(200, "Services reloaded successfully")]
+        public IActionResult ReloadServices()
+        {
+            var config = _configService.Get();
+            var gtaPath = config.GTAPath;
+            
+            _serviceContainer.ReloadServices();
+            
+            return Ok(new { 
+                message = "Services reloaded successfully.",
+                gtaPath = gtaPath,
+                reloadVersion = _serviceContainer.GetReloadVersion(),
+                timestamp = DateTime.UtcNow
+            });
         }
     }
 }
