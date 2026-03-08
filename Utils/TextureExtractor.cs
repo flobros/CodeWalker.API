@@ -3,11 +3,25 @@ using CodeWalker.Utils;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 
 public class TextureExtractor
 {
     private readonly GameFileCache _gameFileCache;
     private readonly ILogger<TextureExtractor> _logger;
+
+    /// <summary>
+    /// Caches successful brute-force texture lookups (texHash → YTD path) to avoid
+    /// repeating the expensive full-scan fallback for textures seen before.
+    /// </summary>
+    private static readonly Dictionary<uint, string> _bruteForceCache = new();
+    private static readonly object _bruteForceCacheLock = new();
+
+    /// <summary>
+    /// Maximum number of YTD entries to probe during the brute-force fallback.
+    /// Prevents unbounded I/O when a texture genuinely does not exist.
+    /// </summary>
+    private const int MaxBruteForceIterations = 100;
 
     public TextureExtractor(GameFileCache cache, ILogger<TextureExtractor> logger)
     {
@@ -87,9 +101,42 @@ public class TextureExtractor
 
             if (texResult == null)
             {
+                // Check the brute-force cache first to avoid redundant full scans
+                string? cachedPath = null;
+                lock (_bruteForceCacheLock)
+                {
+                    _bruteForceCache.TryGetValue(texHash, out cachedPath);
+                }
+
+                if (cachedPath != null && _gameFileCache.YtdDict.Values.FirstOrDefault(e => e?.Path == cachedPath) is { } cachedEntry)
+                {
+                    try
+                    {
+                        var data = _gameFileCache.RpfMan.GetFileData(cachedEntry.Path);
+                        var cachedYtd = new YtdFile();
+                        cachedYtd.Load(data, cachedEntry);
+                        cachedYtd.Loaded = true;
+                        texResult = TryGetTextureFromYtd(texHash, cachedYtd);
+                        if (texResult != null)
+                        {
+                            _logger.LogDebug($"💥 Brute-force cache hit for {texHash:X8} in {cachedEntry.Path}");
+                            return texResult;
+                        }
+                    }
+                    catch { /* cache entry stale – fall through to limited scan */ }
+                }
+
+                // Limited brute-force scan (capped at MaxBruteForceIterations)
+                _logger.LogWarning($"⚠️ Starting limited brute-force texture scan for {texHash:X8} (max {MaxBruteForceIterations} entries)");
+                int iterations = 0;
                 foreach (var fallbackEntry in _gameFileCache.YtdDict.Values)
                 {
                     if (fallbackEntry == null) continue;
+                    if (++iterations > MaxBruteForceIterations)
+                    {
+                        _logger.LogWarning($"⚠️ Brute-force limit ({MaxBruteForceIterations}) reached for texture {texHash:X8}. Giving up.");
+                        break;
+                    }
                     try
                     {
                         var data = _gameFileCache.RpfMan.GetFileData(fallbackEntry.Path);
@@ -99,7 +146,11 @@ public class TextureExtractor
                         texResult = TryGetTextureFromYtd(texHash, fallbackYtd);
                         if (texResult != null)
                         {
-                            _logger.LogDebug($"💥 Fallback hit in {fallbackEntry.Path}");
+                            _logger.LogDebug($"💥 Fallback hit in {fallbackEntry.Path} (after {iterations} probes)");
+                            lock (_bruteForceCacheLock)
+                            {
+                                _bruteForceCache[texHash] = fallbackEntry.Path;
+                            }
                             return texResult;
                         }
                     }
