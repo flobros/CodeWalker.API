@@ -1,8 +1,15 @@
 ﻿name: Build and Release CodeWalker API
+
 on:
   push:
-    tags:
-      - "v*" # Runs when a version tag like v1.0.0 is pushed
+    branches:
+      - main
+  workflow_dispatch: # Allow manual trigger from GitHub UI
+
+# Prevent concurrent releases from overlapping
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   build:
@@ -12,8 +19,56 @@ jobs:
       - name: Checkout CodeWalker.API Repo
         uses: actions/checkout@v4
         with:
-          path: CodeWalker.API # Clones into ${{ github.workspace }}/CodeWalker.API
+          path: CodeWalker.API
+          fetch-depth: 0 # Full history needed for tag detection
 
+      # ── Auto-version: fetch latest tag and bump patch ──
+      - name: Determine next version
+        id: version
+        shell: pwsh
+        run: |
+          cd "${{ github.workspace }}/CodeWalker.API"
+          # Get the latest semver tag (e.g. v1.2.3), default to v0.0.0 if none
+          $latest = git tag --list "v*" --sort=-version:refname | Select-Object -First 1
+          if (-not $latest) { $latest = "v0.0.0" }
+          Write-Host "Latest tag: $latest"
+
+          # Parse major.minor.patch
+          $parts = $latest.TrimStart('v').Split('.')
+          $major = [int]$parts[0]
+          $minor = [int]$parts[1]
+          $patch = [int]$parts[2]
+
+          # Check commit messages since last tag for version bump hints
+          $commits = git log "$latest..HEAD" --pretty=format:"%s" 2>$null
+          if ($commits -match "(?i)BREAKING CHANGE|^feat!") {
+            $major++; $minor = 0; $patch = 0
+            Write-Host "Detected BREAKING CHANGE → major bump"
+          } elseif ($commits -match "(?i)^feat") {
+            $minor++; $patch = 0
+            Write-Host "Detected feat → minor bump"
+          } else {
+            $patch++
+            Write-Host "Default → patch bump"
+          }
+
+          $newVersion = "v$major.$minor.$patch"
+          Write-Host "New version: $newVersion"
+          echo "TAG=$newVersion" >> $env:GITHUB_OUTPUT
+          echo "VERSION_NUMBER=$major.$minor.$patch" >> $env:GITHUB_OUTPUT
+
+      - name: Create and push tag
+        shell: pwsh
+        run: |
+          cd "${{ github.workspace }}/CodeWalker.API"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "${{ steps.version.outputs.TAG }}" -m "Release ${{ steps.version.outputs.TAG }}"
+          git push origin "${{ steps.version.outputs.TAG }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+
+      # ── Build pipeline (unchanged) ──
       - name: Clone Full CodeWalker Repo (for CodeWalker.Core)
         run: |
           git clone --depth=1 https://github.com/dexyfex/CodeWalker.git "${{ github.workspace }}/CodeWalkerRepo"
@@ -50,7 +105,7 @@ jobs:
       - name: Publish CodeWalker.API (as admin-elevated .exe)
         run: |
           cd "${{ github.workspace }}/CodeWalker.API"
-          dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true
+          dotnet publish -c Release -r win-x64 --self-contained true /p:PublishSingleFile=true /p:Version=${{ steps.version.outputs.VERSION_NUMBER }}
 
       - name: Package published output as ZIP
         shell: cmd
@@ -67,15 +122,12 @@ jobs:
                 echo "✅ ZIP file created successfully."
             )
 
-      - name: Debug - List Workspace Contents
-        shell: cmd
-        run: |
-          @echo on
-          dir /s "${{ github.workspace }}"
-
       - name: Upload Release
         uses: softprops/action-gh-release@v2
         with:
+          tag_name: ${{ steps.version.outputs.TAG }}
+          name: "CodeWalker API ${{ steps.version.outputs.TAG }}"
+          generate_release_notes: true
           files: "${{ github.workspace }}/CodeWalker.API.zip"
         env:
           GITHUB_TOKEN: ${{ secrets.RELEASE_TOKEN }}
