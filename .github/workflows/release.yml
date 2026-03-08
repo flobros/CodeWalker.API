@@ -3,7 +3,7 @@
 on:
   push:
     branches:
-      - main
+      - master
   workflow_dispatch: # Allow manual trigger from GitHub UI
 
 # Prevent concurrent releases from overlapping
